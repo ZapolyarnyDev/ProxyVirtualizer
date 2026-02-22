@@ -1,0 +1,7 @@
+[versions]
+lombok = "1.18.36"
+velocity = "3.4.0-SNAPSHOT"
+
+[libraries]
+lombok = { module = "org.projectlombok:lombok", version.ref = "lombok" }
+velocity-api = { module = "com.velocitypowered:velocity-api", version.ref = "velocity" }
