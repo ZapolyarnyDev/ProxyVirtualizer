@@ -9,6 +9,7 @@ import io.github.zapolyarnydev.proxyvirtualizer.api.exception.VirtualServerAlrea
 import io.github.zapolyarnydev.proxyvirtualizer.api.registry.ServerContainer;
 import io.github.zapolyarnydev.proxyvirtualizer.api.server.Launcher;
 import io.github.zapolyarnydev.proxyvirtualizer.api.server.VirtualServer;
+import io.github.zapolyarnydev.proxyvirtualizer.plugin.packet.VelocityVirtualPacketSender;
 import net.kyori.adventure.text.Component;
 
 import java.util.ArrayList;
@@ -21,17 +22,33 @@ import java.util.stream.Collectors;
 public final class VirtualServerCommand implements SimpleCommand {
 
     private static final List<String> SUBCOMMANDS = List.of(
-            "help", "list", "launch", "stop", "connect", "disconnect", "allow-protocol", "deny-protocol", "packet-map"
+            "help",
+            "list",
+            "launch",
+            "stop",
+            "connect",
+            "disconnect",
+            "allow-protocol",
+            "deny-protocol",
+            "packet-map",
+            "packet"
     );
 
     private final ServerContainer serverContainer;
     private final Launcher launcher;
     private final Connector connector;
+    private final VelocityVirtualPacketSender packetSender;
 
-    public VirtualServerCommand(ServerContainer serverContainer, Launcher launcher, Connector connector) {
+    public VirtualServerCommand(
+            ServerContainer serverContainer,
+            Launcher launcher,
+            Connector connector,
+            VelocityVirtualPacketSender packetSender
+    ) {
         this.serverContainer = serverContainer;
         this.launcher = launcher;
         this.connector = connector;
+        this.packetSender = packetSender;
     }
 
     @Override
@@ -53,6 +70,7 @@ public final class VirtualServerCommand implements SimpleCommand {
             case "allow-protocol" -> handleAllowProtocol(invocation.source(), args);
             case "deny-protocol" -> handleDenyProtocol(invocation.source(), args);
             case "packet-map" -> handlePacketMap(invocation.source(), args);
+            case "packet" -> handlePacket(invocation.source(), args);
             default -> {
                 message(invocation.source(), "Unknown subcommand: " + args[0]);
                 sendHelp(invocation.source());
@@ -75,12 +93,15 @@ public final class VirtualServerCommand implements SimpleCommand {
         String subcommand = args[0].toLowerCase(Locale.ROOT);
         if (List.of("stop", "connect", "allow-protocol", "deny-protocol", "packet-map").contains(subcommand)
                 && args.length == 2) {
-            String prefix = args[1].toLowerCase(Locale.ROOT);
-            return serverContainer.getServers().stream()
-                    .map(VirtualServer::getName)
-                    .filter(name -> name.toLowerCase(Locale.ROOT).startsWith(prefix))
-                    .sorted()
-                    .toList();
+            return suggestServerNames(args[1]);
+        }
+
+        if ("packet".equals(subcommand) && args.length == 2) {
+            return filterPrefix(List.of("keepalive", "chat", "actionbar", "title", "disconnect"), args[1]);
+        }
+
+        if ("packet".equals(subcommand) && args.length == 3) {
+            return suggestServerNames(args[2]);
         }
 
         return List.of();
@@ -151,7 +172,8 @@ public final class VirtualServerCommand implements SimpleCommand {
                 message(source, "Your protocol version is not supported by this virtual server.");
                 return;
             }
-            message(source, "Connected to virtual server: " + serverOptional.get().getName());
+            message(source, "Connected to virtual server: " + serverOptional.get().getName()
+                    + " (backend connection detached)");
         } catch (PlayerAlreadyConnectedException exception) {
             message(source, exception.getMessage());
         }
@@ -243,6 +265,62 @@ public final class VirtualServerCommand implements SimpleCommand {
                 + " packet=" + rule.packetVersion());
     }
 
+    private void handlePacket(CommandSource source, String[] args) {
+        if (args.length < 3) {
+            message(source, "Usage: /vserver packet <keepalive|chat|actionbar|title|disconnect> <server> [payload]");
+            return;
+        }
+
+        String action = args[1].toLowerCase(Locale.ROOT);
+        Optional<VirtualServer> serverOptional = serverContainer.findServerByName(args[2]);
+        if (serverOptional.isEmpty()) {
+            message(source, "Virtual server not found: " + args[2]);
+            return;
+        }
+
+        VirtualServer virtualServer = serverOptional.get();
+        switch (action) {
+            case "keepalive" -> {
+                int sent = packetSender.broadcastKeepAlive(virtualServer);
+                message(source, "KeepAlive sent to " + sent + " player(s) in " + virtualServer.getName());
+            }
+            case "chat" -> {
+                String text = joinTail(args, 3);
+                if (text.isBlank()) {
+                    message(source, "Usage: /vserver packet chat <server> <message>");
+                    return;
+                }
+                int sent = packetSender.broadcastChat(virtualServer, Component.text(text));
+                message(source, "Chat packet sent to " + sent + " player(s).");
+            }
+            case "actionbar" -> {
+                String text = joinTail(args, 3);
+                if (text.isBlank()) {
+                    message(source, "Usage: /vserver packet actionbar <server> <message>");
+                    return;
+                }
+                int sent = packetSender.broadcastActionBar(virtualServer, Component.text(text));
+                message(source, "ActionBar packet sent to " + sent + " player(s).");
+            }
+            case "title" -> {
+                String text = joinTail(args, 3);
+                if (text.isBlank()) {
+                    message(source, "Usage: /vserver packet title <server> <title text>");
+                    return;
+                }
+                int sent = packetSender.broadcastTitle(virtualServer, Component.text(text), Component.empty());
+                message(source, "Title packet sent to " + sent + " player(s).");
+            }
+            case "disconnect" -> {
+                String text = joinTail(args, 3);
+                Component reason = Component.text(text.isBlank() ? "Disconnected from virtual server" : text);
+                int sent = packetSender.broadcastDisconnect(virtualServer, reason);
+                message(source, "Disconnect packet sent to " + sent + " player(s).");
+            }
+            default -> message(source, "Unknown packet action: " + action);
+        }
+    }
+
     private void sendHelp(CommandSource source) {
         List<String> lines = Arrays.asList(
                 "/vserver list",
@@ -252,13 +330,34 @@ public final class VirtualServerCommand implements SimpleCommand {
                 "/vserver disconnect",
                 "/vserver allow-protocol <server> <protocolVersion>",
                 "/vserver deny-protocol <server> <protocolVersion>",
-                "/vserver packet-map <server> <packetKey> <protocolVersion> <packetVersion>"
+                "/vserver packet-map <server> <packetKey> <protocolVersion> <packetVersion>",
+                "/vserver packet keepalive <server>",
+                "/vserver packet actionbar <server> <message>",
+                "/vserver packet chat <server> <message>",
+                "/vserver packet title <server> <title>",
+                "/vserver packet disconnect <server> [reason]"
         );
 
         message(source, "ProxyVirtualizer commands:");
         for (String line : lines) {
             message(source, " - " + line);
         }
+    }
+
+    private List<String> suggestServerNames(String rawPrefix) {
+        String prefix = rawPrefix.toLowerCase(Locale.ROOT);
+        return serverContainer.getServers().stream()
+                .map(VirtualServer::getName)
+                .filter(name -> name.toLowerCase(Locale.ROOT).startsWith(prefix))
+                .sorted()
+                .toList();
+    }
+
+    private static List<String> filterPrefix(List<String> values, String rawPrefix) {
+        String prefix = rawPrefix.toLowerCase(Locale.ROOT);
+        return values.stream()
+                .filter(value -> value.startsWith(prefix))
+                .toList();
     }
 
     private static void message(CommandSource source, String message) {
@@ -271,5 +370,12 @@ public final class VirtualServerCommand implements SimpleCommand {
         } catch (NumberFormatException ignored) {
             return null;
         }
+    }
+
+    private static String joinTail(String[] args, int fromIndex) {
+        if (args.length <= fromIndex) {
+            return "";
+        }
+        return String.join(" ", Arrays.copyOfRange(args, fromIndex, args.length)).trim();
     }
 }

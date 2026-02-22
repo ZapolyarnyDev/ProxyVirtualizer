@@ -14,6 +14,7 @@ import io.github.zapolyarnydev.proxyvirtualizer.api.server.Launcher;
 import io.github.zapolyarnydev.proxyvirtualizer.plugin.command.VirtualServerCommand;
 import io.github.zapolyarnydev.proxyvirtualizer.plugin.connector.InMemoryConnectionStorage;
 import io.github.zapolyarnydev.proxyvirtualizer.plugin.connector.VelocityConnectorImpl;
+import io.github.zapolyarnydev.proxyvirtualizer.plugin.packet.VelocityVirtualPacketSender;
 import io.github.zapolyarnydev.proxyvirtualizer.plugin.registry.InMemoryServerContainer;
 import io.github.zapolyarnydev.proxyvirtualizer.plugin.server.DefaultVirtualServerLauncher;
 import org.slf4j.Logger;
@@ -31,6 +32,7 @@ public final class ProxyVirtualizerVelocityPlugin {
     private final ServerContainer serverContainer;
     private final ConnectionStorage connectionStorage;
     private final VelocityConnectorImpl connector;
+    private final VelocityVirtualPacketSender packetSender;
     private final Launcher launcher;
     private final ProxyVirtualizerApi api;
 
@@ -42,6 +44,7 @@ public final class ProxyVirtualizerVelocityPlugin {
         this.serverContainer = new InMemoryServerContainer();
         this.connectionStorage = new InMemoryConnectionStorage();
         this.connector = new VelocityConnectorImpl(proxyServer, connectionStorage);
+        this.packetSender = new VelocityVirtualPacketSender(proxyServer, connectionStorage);
         this.launcher = new DefaultVirtualServerLauncher(proxyServer, serverContainer, connectionStorage, connector);
         this.api = ProxyVirtualizerApi.of(serverContainer);
     }
@@ -54,7 +57,7 @@ public final class ProxyVirtualizerVelocityPlugin {
                         .aliases("virtualserver", "vs")
                         .plugin(this)
                         .build(),
-                new VirtualServerCommand(serverContainer, launcher, connector)
+                new VirtualServerCommand(serverContainer, launcher, connector, packetSender)
         );
         logger.info("ProxyVirtualizer initialized");
     }
@@ -87,6 +90,10 @@ public final class ProxyVirtualizerVelocityPlugin {
 
     public Launcher getLauncher() {
         return launcher;
+    }
+
+    public VelocityVirtualPacketSender getPacketSender() {
+        return packetSender;
     }
 
     public ProxyVirtualizerApi getApi() {

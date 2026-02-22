@@ -46,6 +46,7 @@ public final class VelocityConnectorImpl implements Connector {
                 .ifPresent(serverConnection -> previousServers.put(player.getUniqueId(), serverConnection));
 
         connectionStorage.register(player, server);
+        detachBackendIfPossible(player);
         return true;
     }
 
@@ -101,11 +102,21 @@ public final class VelocityConnectorImpl implements Connector {
         previousServers.remove(player.getUniqueId());
     }
 
+    private void detachBackendIfPossible(Player player) {
+        player.getCurrentServer().ifPresent(currentServer -> {
+            try {
+                currentServer.getClass().getMethod("disconnect").invoke(currentServer);
+            } catch (ReflectiveOperationException ignored) {
+
+            }
+        });
+    }
+
     private boolean send(Player player, RegisteredServer server) {
         if (server == null) {
             return false;
         }
-        player.createConnectionRequest(server).connect();
+        player.createConnectionRequest(server).fireAndForget();
         return true;
     }
 }
