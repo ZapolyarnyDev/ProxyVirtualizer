@@ -57,7 +57,7 @@ public final class ProxyVirtualizerVelocityPlugin {
                         .aliases("virtualserver", "vs")
                         .plugin(this)
                         .build(),
-                new VirtualServerCommand(serverContainer, launcher, connector, packetSender)
+                new VirtualServerCommand(serverContainer, proxyServer, launcher, connector, packetSender)
         );
         logger.info("ProxyVirtualizer initialized");
     }

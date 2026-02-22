@@ -122,6 +122,34 @@ public final class VelocityConnectorImpl implements Connector {
 
             }
         });
+
+        clearConnectedServerReference(player);
+    }
+
+    private void clearConnectedServerReference(Player player) {
+        try {
+            Class<?> playerClass = player.getClass();
+
+            var connectedServerField = playerClass.getDeclaredField("connectedServer");
+            connectedServerField.setAccessible(true);
+            connectedServerField.set(player, null);
+
+            try {
+                var connectionInFlightField = playerClass.getDeclaredField("connectionInFlight");
+                connectionInFlightField.setAccessible(true);
+                connectionInFlightField.set(player, null);
+            } catch (NoSuchFieldException ignored) {
+
+            }
+
+            try {
+                playerClass.getMethod("discardChatQueue").invoke(player);
+            } catch (ReflectiveOperationException ignored) {
+
+            }
+        } catch (ReflectiveOperationException ignored) {
+
+        }
     }
 
     private boolean send(Player player, RegisteredServer server) {

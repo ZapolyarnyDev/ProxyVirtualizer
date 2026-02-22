@@ -3,6 +3,7 @@ package io.github.zapolyarnydev.proxyvirtualizer.plugin.command;
 import com.velocitypowered.api.command.CommandSource;
 import com.velocitypowered.api.command.SimpleCommand;
 import com.velocitypowered.api.proxy.Player;
+import com.velocitypowered.api.proxy.ProxyServer;
 import io.github.zapolyarnydev.proxyvirtualizer.api.connector.Connector;
 import io.github.zapolyarnydev.proxyvirtualizer.api.exception.PlayerAlreadyConnectedException;
 import io.github.zapolyarnydev.proxyvirtualizer.api.exception.VirtualServerAlreadyLaunchedException;
@@ -35,17 +36,20 @@ public final class VirtualServerCommand implements SimpleCommand {
     );
 
     private final ServerContainer serverContainer;
+    private final ProxyServer proxyServer;
     private final Launcher launcher;
     private final Connector connector;
     private final VelocityVirtualPacketSender packetSender;
 
     public VirtualServerCommand(
             ServerContainer serverContainer,
+            ProxyServer proxyServer,
             Launcher launcher,
             Connector connector,
             VelocityVirtualPacketSender packetSender
     ) {
         this.serverContainer = serverContainer;
+        this.proxyServer = proxyServer;
         this.launcher = launcher;
         this.connector = connector;
         this.packetSender = packetSender;
@@ -66,7 +70,7 @@ public final class VirtualServerCommand implements SimpleCommand {
             case "launch" -> handleLaunch(invocation.source(), args);
             case "stop" -> handleStop(invocation.source(), args);
             case "connect" -> handleConnect(invocation.source(), args);
-            case "disconnect", "leave" -> handleDisconnect(invocation.source());
+            case "disconnect", "leave" -> handleDisconnect(invocation.source(), args);
             case "allow-protocol" -> handleAllowProtocol(invocation.source(), args);
             case "deny-protocol" -> handleDenyProtocol(invocation.source(), args);
             case "packet-map" -> handlePacketMap(invocation.source(), args);
@@ -150,13 +154,13 @@ public final class VirtualServerCommand implements SimpleCommand {
     }
 
     private void handleConnect(CommandSource source, String[] args) {
-        if (!(source instanceof Player player)) {
-            message(source, "This subcommand can only be used by a player.");
+        if (args.length < 2) {
+            message(source, "Usage: /vserver connect <name> [player]");
             return;
         }
 
-        if (args.length < 2) {
-            message(source, "Usage: /vserver connect <name>");
+        Player player = resolveTargetPlayer(source, args, 2);
+        if (player == null) {
             return;
         }
 
@@ -172,27 +176,27 @@ public final class VirtualServerCommand implements SimpleCommand {
                 message(source, "Failed to enter virtual server. Expected limbo-capable client/protocol (target: 1.21.4) and successful bootstrap.");
                 return;
             }
-            message(source, "Connected to virtual server: " + serverOptional.get().getName()
+            message(source, "Connected " + player.getUsername() + " to virtual server: " + serverOptional.get().getName()
                     + " (backend connection detached)");
         } catch (PlayerAlreadyConnectedException exception) {
             message(source, exception.getMessage());
         }
     }
 
-    private void handleDisconnect(CommandSource source) {
-        if (!(source instanceof Player player)) {
-            message(source, "This subcommand can only be used by a player.");
+    private void handleDisconnect(CommandSource source, String[] args) {
+        Player player = resolveTargetPlayer(source, args, 1);
+        if (player == null) {
             return;
         }
 
         boolean disconnected = connector.disconnect(player);
         if (!disconnected) {
-            message(source, "You are not connected to a virtual server.");
+            message(source, player.getUsername() + " is not connected to a virtual server.");
             return;
         }
 
         connector.sendToPreviousServer(player);
-        message(source, "Disconnected from virtual server.");
+        message(source, "Disconnected " + player.getUsername() + " from virtual server.");
     }
 
     private void handleAllowProtocol(CommandSource source, String[] args) {
@@ -331,7 +335,9 @@ public final class VirtualServerCommand implements SimpleCommand {
                 "/vserver launch <name>",
                 "/vserver stop <name>",
                 "/vserver connect <name>",
+                "/vserver connect <name> <player>",
                 "/vserver disconnect",
+                "/vserver disconnect <player>",
                 "/vserver allow-protocol <server> <protocolVersion>",
                 "/vserver deny-protocol <server> <protocolVersion>",
                 "/vserver packet-map <server> <packetKey> <protocolVersion> <packetVersion>",
@@ -375,6 +381,25 @@ public final class VirtualServerCommand implements SimpleCommand {
         } catch (NumberFormatException ignored) {
             return null;
         }
+    }
+
+    private Player resolveTargetPlayer(CommandSource source, String[] args, int playerArgIndex) {
+        if (args.length > playerArgIndex) {
+            String playerName = args[playerArgIndex];
+            Optional<Player> playerOptional = proxyServer.getPlayer(playerName);
+            if (playerOptional.isEmpty()) {
+                message(source, "Player not found: " + playerName);
+                return null;
+            }
+            return playerOptional.get();
+        }
+
+        if (source instanceof Player player) {
+            return player;
+        }
+
+        message(source, "This subcommand requires a player argument when used from console.");
+        return null;
     }
 
     private static String joinTail(String[] args, int fromIndex) {
