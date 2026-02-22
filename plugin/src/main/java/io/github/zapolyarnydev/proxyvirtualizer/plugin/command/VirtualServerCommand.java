@@ -11,6 +11,7 @@ import io.github.zapolyarnydev.proxyvirtualizer.api.registry.ServerContainer;
 import io.github.zapolyarnydev.proxyvirtualizer.api.server.Launcher;
 import io.github.zapolyarnydev.proxyvirtualizer.api.server.VirtualServer;
 import io.github.zapolyarnydev.proxyvirtualizer.plugin.packet.VelocityVirtualPacketSender;
+import io.github.zapolyarnydev.proxyvirtualizer.plugin.text.AdventureComponentParser;
 import net.kyori.adventure.text.Component;
 
 import java.util.ArrayList;
@@ -21,6 +22,7 @@ import java.util.Optional;
 import java.util.stream.Collectors;
 
 public final class VirtualServerCommand implements SimpleCommand {
+    private static final AdventureComponentParser COMPONENT_PARSER = new AdventureComponentParser();
 
     private static final List<String> SUBCOMMANDS = List.of(
             "help",
@@ -298,7 +300,7 @@ public final class VirtualServerCommand implements SimpleCommand {
                     message(source, "Usage: /vserver packet chat <server> <message>");
                     return;
                 }
-                int sent = packetSender.broadcastChat(virtualServer, Component.text(text));
+                int sent = packetSender.broadcastChat(virtualServer, COMPONENT_PARSER.parse(text));
                 message(source, "Chat packet sent to " + sent + " player(s).");
             }
             case "actionbar" -> {
@@ -307,21 +309,26 @@ public final class VirtualServerCommand implements SimpleCommand {
                     message(source, "Usage: /vserver packet actionbar <server> <message>");
                     return;
                 }
-                int sent = packetSender.broadcastActionBar(virtualServer, Component.text(text));
+                int sent = packetSender.broadcastActionBar(virtualServer, COMPONENT_PARSER.parse(text));
                 message(source, "ActionBar packet sent to " + sent + " player(s).");
             }
             case "title" -> {
                 String text = joinTail(args, 3);
                 if (text.isBlank()) {
-                    message(source, "Usage: /vserver packet title <server> <title text>");
+                    message(source, "Usage: /vserver packet title <server> <title[||subtitle]>");
                     return;
                 }
-                int sent = packetSender.broadcastTitle(virtualServer, Component.text(text), Component.empty());
+                String[] titleParts = text.split("\\|\\|", 2);
+                Component title = COMPONENT_PARSER.parse(titleParts[0]);
+                Component subtitle = titleParts.length > 1 ? COMPONENT_PARSER.parse(titleParts[1]) : Component.empty();
+                int sent = packetSender.broadcastTitle(virtualServer, title, subtitle);
                 message(source, "Title packet sent to " + sent + " player(s).");
             }
             case "disconnect" -> {
                 String text = joinTail(args, 3);
-                Component reason = Component.text(text.isBlank() ? "Disconnected from virtual server" : text);
+                Component reason = text.isBlank()
+                        ? Component.text("Disconnected from virtual server")
+                        : COMPONENT_PARSER.parse(text);
                 int sent = packetSender.broadcastDisconnect(virtualServer, reason);
                 message(source, "Disconnect packet sent to " + sent + " player(s).");
             }
@@ -345,8 +352,9 @@ public final class VirtualServerCommand implements SimpleCommand {
                 "/vserver packet keepalive <server>",
                 "/vserver packet actionbar <server> <message>",
                 "/vserver packet chat <server> <message>",
-                "/vserver packet title <server> <title>",
-                "/vserver packet disconnect <server> [reason]"
+                "/vserver packet title <server> <title[||subtitle]>",
+                "/vserver packet disconnect <server> [reason]",
+                "Message formats: mm:<...> | legacy:&a... | json:{...} (default tries MiniMessage)"
         );
 
         message(source, "ProxyVirtualizer commands:");
