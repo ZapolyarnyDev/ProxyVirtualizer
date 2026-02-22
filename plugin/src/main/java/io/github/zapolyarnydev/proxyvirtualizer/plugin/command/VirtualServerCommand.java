@@ -97,7 +97,7 @@ public final class VirtualServerCommand implements SimpleCommand {
         }
 
         if ("packet".equals(subcommand) && args.length == 2) {
-            return filterPrefix(List.of("keepalive", "chat", "actionbar", "title", "disconnect"), args[1]);
+            return filterPrefix(List.of("limbo", "keepalive", "chat", "actionbar", "title", "disconnect"), args[1]);
         }
 
         if ("packet".equals(subcommand) && args.length == 3) {
@@ -169,7 +169,7 @@ public final class VirtualServerCommand implements SimpleCommand {
         try {
             boolean connected = connector.connect(serverOptional.get(), player);
             if (!connected) {
-                message(source, "Your protocol version is not supported by this virtual server.");
+                message(source, "Failed to enter virtual server. Expected limbo-capable client/protocol (target: 1.21.4) and successful bootstrap.");
                 return;
             }
             message(source, "Connected to virtual server: " + serverOptional.get().getName()
@@ -267,7 +267,7 @@ public final class VirtualServerCommand implements SimpleCommand {
 
     private void handlePacket(CommandSource source, String[] args) {
         if (args.length < 3) {
-            message(source, "Usage: /vserver packet <keepalive|chat|actionbar|title|disconnect> <server> [payload]");
+            message(source, "Usage: /vserver packet <limbo|keepalive|chat|actionbar|title|disconnect> <server> [payload]");
             return;
         }
 
@@ -280,6 +280,10 @@ public final class VirtualServerCommand implements SimpleCommand {
 
         VirtualServer virtualServer = serverOptional.get();
         switch (action) {
+            case "limbo" -> {
+                int sent = packetSender.broadcastVoidLimboBootstrap(virtualServer);
+                message(source, "Void limbo bootstrap sent to " + sent + " player(s) in " + virtualServer.getName() + " (target 1.21.4).");
+            }
             case "keepalive" -> {
                 int sent = packetSender.broadcastKeepAlive(virtualServer);
                 message(source, "KeepAlive sent to " + sent + " player(s) in " + virtualServer.getName());
@@ -331,6 +335,7 @@ public final class VirtualServerCommand implements SimpleCommand {
                 "/vserver allow-protocol <server> <protocolVersion>",
                 "/vserver deny-protocol <server> <protocolVersion>",
                 "/vserver packet-map <server> <packetKey> <protocolVersion> <packetVersion>",
+                "/vserver packet limbo <server>",
                 "/vserver packet keepalive <server>",
                 "/vserver packet actionbar <server> <message>",
                 "/vserver packet chat <server> <message>",

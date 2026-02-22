@@ -43,8 +43,8 @@ public final class ProxyVirtualizerVelocityPlugin {
 
         this.serverContainer = new InMemoryServerContainer();
         this.connectionStorage = new InMemoryConnectionStorage();
-        this.connector = new VelocityConnectorImpl(proxyServer, connectionStorage);
         this.packetSender = new VelocityVirtualPacketSender(proxyServer, connectionStorage);
+        this.connector = new VelocityConnectorImpl(proxyServer, connectionStorage, packetSender);
         this.launcher = new DefaultVirtualServerLauncher(proxyServer, serverContainer, connectionStorage, connector);
         this.api = ProxyVirtualizerApi.of(serverContainer);
     }

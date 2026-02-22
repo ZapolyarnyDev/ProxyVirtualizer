@@ -6,7 +6,9 @@ public final class VirtualPacketKeys {
     public static final String CHAT = "clientbound.chat";
     public static final String ACTION_BAR = "clientbound.action_bar";
     public static final String TITLE = "clientbound.title";
+    public static final String RESPAWN = "clientbound.respawn";
     public static final String DISCONNECT = "clientbound.disconnect";
+    public static final String LIMBO_BOOTSTRAP = "virtual.limbo.bootstrap";
 
     private VirtualPacketKeys() {
     }

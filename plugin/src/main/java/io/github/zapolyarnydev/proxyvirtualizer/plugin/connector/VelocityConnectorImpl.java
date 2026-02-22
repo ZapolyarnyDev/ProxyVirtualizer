@@ -8,6 +8,7 @@ import io.github.zapolyarnydev.proxyvirtualizer.api.connector.ConnectionStorage;
 import io.github.zapolyarnydev.proxyvirtualizer.api.connector.Connector;
 import io.github.zapolyarnydev.proxyvirtualizer.api.exception.PlayerAlreadyConnectedException;
 import io.github.zapolyarnydev.proxyvirtualizer.api.server.VirtualServer;
+import io.github.zapolyarnydev.proxyvirtualizer.plugin.packet.VelocityVirtualPacketSender;
 
 import java.util.Map;
 import java.util.Objects;
@@ -18,11 +19,17 @@ public final class VelocityConnectorImpl implements Connector {
 
     private final ProxyServer proxyServer;
     private final ConnectionStorage connectionStorage;
+    private final VelocityVirtualPacketSender packetSender;
     private final Map<UUID, RegisteredServer> previousServers = new ConcurrentHashMap<>();
 
-    public VelocityConnectorImpl(ProxyServer proxyServer, ConnectionStorage connectionStorage) {
+    public VelocityConnectorImpl(
+            ProxyServer proxyServer,
+            ConnectionStorage connectionStorage,
+            VelocityVirtualPacketSender packetSender
+    ) {
         this.proxyServer = Objects.requireNonNull(proxyServer, "proxyServer");
         this.connectionStorage = Objects.requireNonNull(connectionStorage, "connectionStorage");
+        this.packetSender = Objects.requireNonNull(packetSender, "packetSender");
     }
 
     @Override
@@ -47,6 +54,11 @@ public final class VelocityConnectorImpl implements Connector {
 
         connectionStorage.register(player, server);
         detachBackendIfPossible(player);
+        if (!packetSender.bootstrapVoidLimbo(server, player)) {
+            connectionStorage.remove(player);
+            sendToPreviousServer(player);
+            return false;
+        }
         return true;
     }
 

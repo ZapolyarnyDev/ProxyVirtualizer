@@ -2,12 +2,14 @@ package io.github.zapolyarnydev.proxyvirtualizer.plugin.server;
 
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ProxyServer;
+import com.velocitypowered.api.network.ProtocolVersion;
 import io.github.zapolyarnydev.proxyvirtualizer.api.connector.ConnectionStorage;
 import io.github.zapolyarnydev.proxyvirtualizer.api.connector.Connector;
 import io.github.zapolyarnydev.proxyvirtualizer.api.exception.VirtualServerAlreadyLaunchedException;
 import io.github.zapolyarnydev.proxyvirtualizer.api.registry.ServerContainer;
 import io.github.zapolyarnydev.proxyvirtualizer.api.server.Launcher;
 import io.github.zapolyarnydev.proxyvirtualizer.api.server.VirtualServer;
+import io.github.zapolyarnydev.proxyvirtualizer.plugin.packet.VirtualPacketKeys;
 
 import java.util.Objects;
 
@@ -39,6 +41,15 @@ public final class DefaultVirtualServerLauncher implements Launcher {
             }
 
             VirtualServer virtualServer = new DefaultVirtualServer(name);
+            int targetProtocol = ProtocolVersion.MINECRAFT_1_21_4.getProtocol();
+            virtualServer.allowProtocolVersion(targetProtocol);
+            virtualServer.registerPacketVersion(VirtualPacketKeys.LIMBO_BOOTSTRAP, targetProtocol, 1);
+            virtualServer.registerPacketVersion(VirtualPacketKeys.RESPAWN, targetProtocol, 1);
+            virtualServer.registerPacketVersion(VirtualPacketKeys.KEEP_ALIVE, targetProtocol, 1);
+            virtualServer.registerPacketVersion(VirtualPacketKeys.CHAT, targetProtocol, 1);
+            virtualServer.registerPacketVersion(VirtualPacketKeys.ACTION_BAR, targetProtocol, 1);
+            virtualServer.registerPacketVersion(VirtualPacketKeys.TITLE, targetProtocol, 1);
+            virtualServer.registerPacketVersion(VirtualPacketKeys.DISCONNECT, targetProtocol, 1);
             serverContainer.register(virtualServer);
             return virtualServer;
         }
