@@ -11,6 +11,7 @@ import io.github.zapolyarnydev.proxyvirtualizer.api.connector.ConnectionStorage;
 import io.github.zapolyarnydev.proxyvirtualizer.api.connector.Connector;
 import io.github.zapolyarnydev.proxyvirtualizer.api.registry.ServerContainer;
 import io.github.zapolyarnydev.proxyvirtualizer.api.server.Launcher;
+import io.github.zapolyarnydev.proxyvirtualizer.plugin.command.VirtualServerCommand;
 import io.github.zapolyarnydev.proxyvirtualizer.plugin.connector.InMemoryConnectionStorage;
 import io.github.zapolyarnydev.proxyvirtualizer.plugin.connector.VelocityConnectorImpl;
 import io.github.zapolyarnydev.proxyvirtualizer.plugin.registry.InMemoryServerContainer;
@@ -47,6 +48,14 @@ public final class ProxyVirtualizerVelocityPlugin {
 
     @Subscribe
     public void onProxyInitialize(ProxyInitializeEvent event) {
+        proxyServer.getCommandManager().register(
+                proxyServer.getCommandManager()
+                        .metaBuilder("vserver")
+                        .aliases("virtualserver", "vs")
+                        .plugin(this)
+                        .build(),
+                new VirtualServerCommand(serverContainer, launcher, connector)
+        );
         logger.info("ProxyVirtualizer initialized");
     }
 
