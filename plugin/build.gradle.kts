@@ -12,3 +12,7 @@ tasks.named<Jar>("jar") {
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     from(project(":api").extensions.getByType(SourceSetContainer::class.java).getByName("main").output)
 }
+
+tasks.named<Jar>("jar") {
+    archiveBaseName.set("ProxyVirtualizer")
+}
