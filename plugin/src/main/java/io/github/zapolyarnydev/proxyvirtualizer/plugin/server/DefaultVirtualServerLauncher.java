@@ -14,6 +14,8 @@ import io.github.zapolyarnydev.proxyvirtualizer.plugin.packet.VirtualPacketKeys;
 import java.util.Objects;
 
 public final class DefaultVirtualServerLauncher implements Launcher {
+    private static final int PACKET_ID_GAME_EVENT_1_21_4 = 0x23;
+    private static final int PACKET_ID_PLAYER_POSITION_1_21_4 = 0x42;
 
     private final Object lock = new Object();
     private final ProxyServer proxyServer;
@@ -44,6 +46,8 @@ public final class DefaultVirtualServerLauncher implements Launcher {
             int targetProtocol = ProtocolVersion.MINECRAFT_1_21_4.getProtocol();
             virtualServer.allowProtocolVersion(targetProtocol);
             virtualServer.registerPacketVersion(VirtualPacketKeys.LIMBO_BOOTSTRAP, targetProtocol, 1);
+            virtualServer.registerPacketVersion(VirtualPacketKeys.GAME_EVENT, targetProtocol, PACKET_ID_GAME_EVENT_1_21_4);
+            virtualServer.registerPacketVersion(VirtualPacketKeys.PLAYER_POSITION, targetProtocol, PACKET_ID_PLAYER_POSITION_1_21_4);
             virtualServer.registerPacketVersion(VirtualPacketKeys.RESPAWN, targetProtocol, 1);
             virtualServer.registerPacketVersion(VirtualPacketKeys.KEEP_ALIVE, targetProtocol, 1);
             virtualServer.registerPacketVersion(VirtualPacketKeys.CHAT, targetProtocol, 1);

@@ -10,8 +10,12 @@ import net.kyori.adventure.title.Title;
 
 import java.lang.reflect.Constructor;
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public final class VelocityVirtualPacketSender {
+    private static final String BYTE_BUF_CLASS = "io.netty.buffer.ByteBuf";
+    private static final String UNPOOLED_CLASS = "io.netty.buffer.Unpooled";
+    private static final String PROTOCOL_UTILS_CLASS = "com.velocitypowered.proxy.protocol.ProtocolUtils";
     private static final String DIMENSION_INFO_CLASS = "com.velocitypowered.proxy.connection.registry.DimensionInfo";
     private static final String RESPAWN_PACKET_CLASS = "com.velocitypowered.proxy.protocol.packet.RespawnPacket";
     private static final String COMPOUND_BINARY_TAG_CLASS = "net.kyori.adventure.nbt.CompoundBinaryTag";
@@ -19,14 +23,24 @@ public final class VelocityVirtualPacketSender {
 
     private static final int OVERWORLD_DIMENSION_ID = 0;
     private static final int NETHER_DIMENSION_ID = 1;
+    private static final int GAME_EVENT_PACKET_ID_1_21_4 = 0x23;
+    private static final int PLAYER_POSITION_PACKET_ID_1_21_4 = 0x42;
+    private static final int GAME_EVENT_START_WAITING_FOR_LEVEL_CHUNKS = 13;
     private static final long LIMBO_SEED_HASH = 0L;
     private static final short GAMEMODE_SPECTATOR = 3;
     private static final short PREVIOUS_GAMEMODE_UNKNOWN = -1;
     private static final byte RESPAWN_KEEP_NOTHING = 0;
     private static final int LIMBO_SEA_LEVEL = 63;
+    private static final double LIMBO_X = 0.0D;
+    private static final double LIMBO_Y = 1024.0D;
+    private static final double LIMBO_Z = 0.0D;
+    private static final float LIMBO_YAW = 0.0F;
+    private static final float LIMBO_PITCH = 0.0F;
+    private static final int TELEPORT_FLAGS_ABSOLUTE = 0;
 
     private final ProxyServer proxyServer;
     private final ConnectionStorage connectionStorage;
+    private final AtomicInteger teleportIdSequence = new AtomicInteger(1);
 
     public VelocityVirtualPacketSender(ProxyServer proxyServer, ConnectionStorage connectionStorage) {
         this.proxyServer = Objects.requireNonNull(proxyServer, "proxyServer");
@@ -93,6 +107,12 @@ public final class VelocityVirtualPacketSender {
         if (!canSend(virtualServer, player, VirtualPacketKeys.RESPAWN)) {
             return false;
         }
+        if (!canSend(virtualServer, player, VirtualPacketKeys.GAME_EVENT)) {
+            return false;
+        }
+        if (!canSend(virtualServer, player, VirtualPacketKeys.PLAYER_POSITION)) {
+            return false;
+        }
 
         try {
             Object connection = player.getClass().getMethod("getConnection").invoke(player);
@@ -115,6 +135,8 @@ public final class VelocityVirtualPacketSender {
 
             connection.getClass().getMethod("write", Object.class).invoke(connection, netherRespawn);
             connection.getClass().getMethod("write", Object.class).invoke(connection, overworldRespawn);
+            sendStartWaitingForLevelChunksGameEvent(virtualServer, player, connection);
+            sendSynchronizePlayerPosition(virtualServer, player, connection);
 
             sendKeepAlive(virtualServer, player);
             return true;
@@ -256,5 +278,76 @@ public final class VelocityVirtualPacketSender {
                 0,
                 LIMBO_SEA_LEVEL
         );
+    }
+
+    private void sendStartWaitingForLevelChunksGameEvent(
+            VirtualServer virtualServer,
+            Player player,
+            Object connection
+    ) throws ReflectiveOperationException {
+        ClassLoader classLoader = getClass().getClassLoader();
+        Class<?> unpooledClass = Class.forName(UNPOOLED_CLASS, true, classLoader);
+        Object byteBuf = unpooledClass.getMethod("buffer").invoke(null);
+
+        Class<?> byteBufClass = Class.forName(BYTE_BUF_CLASS, true, classLoader);
+        Class<?> protocolUtilsClass = Class.forName(PROTOCOL_UTILS_CLASS, true, classLoader);
+
+        int packetId = virtualServer.getPacketVersion(VirtualPacketKeys.GAME_EVENT, player.getProtocolVersion().getProtocol())
+                .map(VirtualServer.PacketVersionRule::packetVersion)
+                .orElse(GAME_EVENT_PACKET_ID_1_21_4);
+
+        protocolUtilsClass.getMethod("writeVarInt", byteBufClass, int.class)
+                .invoke(null, byteBuf, packetId);
+        byteBufClass.getMethod("writeByte", int.class)
+                .invoke(byteBuf, GAME_EVENT_START_WAITING_FOR_LEVEL_CHUNKS);
+        byteBufClass.getMethod("writeFloat", float.class)
+                .invoke(byteBuf, 0.0F);
+
+        connection.getClass().getMethod("write", Object.class).invoke(connection, byteBuf);
+    }
+
+    private void sendSynchronizePlayerPosition(
+            VirtualServer virtualServer,
+            Player player,
+            Object connection
+    ) throws ReflectiveOperationException {
+        ClassLoader classLoader = getClass().getClassLoader();
+        Class<?> unpooledClass = Class.forName(UNPOOLED_CLASS, true, classLoader);
+        Object byteBuf = unpooledClass.getMethod("buffer").invoke(null);
+
+        Class<?> byteBufClass = Class.forName(BYTE_BUF_CLASS, true, classLoader);
+        Class<?> protocolUtilsClass = Class.forName(PROTOCOL_UTILS_CLASS, true, classLoader);
+
+        int protocol = player.getProtocolVersion().getProtocol();
+        int packetId = virtualServer.getPacketVersion(VirtualPacketKeys.PLAYER_POSITION, protocol)
+                .map(VirtualServer.PacketVersionRule::packetVersion)
+                .orElse(PLAYER_POSITION_PACKET_ID_1_21_4);
+        int teleportId = nextTeleportId();
+
+        protocolUtilsClass.getMethod("writeVarInt", byteBufClass, int.class)
+                .invoke(null, byteBuf, packetId);
+        protocolUtilsClass.getMethod("writeVarInt", byteBufClass, int.class)
+                .invoke(null, byteBuf, teleportId);
+
+        byteBufClass.getMethod("writeDouble", double.class).invoke(byteBuf, LIMBO_X);
+        byteBufClass.getMethod("writeDouble", double.class).invoke(byteBuf, LIMBO_Y);
+        byteBufClass.getMethod("writeDouble", double.class).invoke(byteBuf, LIMBO_Z);
+        byteBufClass.getMethod("writeDouble", double.class).invoke(byteBuf, 0.0D); // velocity X
+        byteBufClass.getMethod("writeDouble", double.class).invoke(byteBuf, 0.0D); // velocity Y
+        byteBufClass.getMethod("writeDouble", double.class).invoke(byteBuf, 0.0D); // velocity Z
+        byteBufClass.getMethod("writeFloat", float.class).invoke(byteBuf, LIMBO_YAW);
+        byteBufClass.getMethod("writeFloat", float.class).invoke(byteBuf, LIMBO_PITCH);
+        byteBufClass.getMethod("writeInt", int.class).invoke(byteBuf, TELEPORT_FLAGS_ABSOLUTE);
+
+        connection.getClass().getMethod("write", Object.class).invoke(connection, byteBuf);
+    }
+
+    private int nextTeleportId() {
+        int id = teleportIdSequence.getAndIncrement();
+        if (id > 0) {
+            return id;
+        }
+        teleportIdSequence.set(2);
+        return 1;
     }
 }
