@@ -1,5 +1,5 @@
 val projectGroup = "io.github.zapolyarnydev"
-val projectVersion = "1.0.0"
+val projectVersion = "1.0.1"
 
 plugins {
     id("java")
