@@ -59,7 +59,7 @@ Supported message formats:
 
 ## License
 
-&copy; 2025 ZapolyarnyDev
+&copy; 2026 ZapolyarnyDev
 
 This project is licensed under the MIT License – see the [LICENSE](LICENSE) file for details
 
