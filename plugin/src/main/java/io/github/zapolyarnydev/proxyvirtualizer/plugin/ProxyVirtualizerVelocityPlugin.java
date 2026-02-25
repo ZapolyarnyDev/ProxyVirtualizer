@@ -4,9 +4,11 @@ import com.google.inject.Inject;
 import com.velocitypowered.api.event.Subscribe;
 import com.velocitypowered.api.event.connection.DisconnectEvent;
 import com.velocitypowered.api.event.proxy.ProxyInitializeEvent;
+import com.velocitypowered.api.event.proxy.ProxyShutdownEvent;
 import com.velocitypowered.api.plugin.Plugin;
 import com.velocitypowered.api.proxy.ProxyServer;
 import io.github.zapolyarnydev.proxyvirtualizer.api.ProxyVirtualizerApi;
+import io.github.zapolyarnydev.proxyvirtualizer.api.ProxyVirtualizerApiProvider;
 import io.github.zapolyarnydev.proxyvirtualizer.api.connector.ConnectionStorage;
 import io.github.zapolyarnydev.proxyvirtualizer.api.connector.Connector;
 import io.github.zapolyarnydev.proxyvirtualizer.api.registry.ServerContainer;
@@ -46,11 +48,12 @@ public final class ProxyVirtualizerVelocityPlugin {
         this.packetSender = new VelocityVirtualPacketSender(proxyServer, connectionStorage);
         this.connector = new VelocityConnectorImpl(proxyServer, connectionStorage, packetSender);
         this.launcher = new DefaultVirtualServerLauncher(proxyServer, serverContainer, connectionStorage, connector);
-        this.api = ProxyVirtualizerApi.of(serverContainer);
+        this.api = ProxyVirtualizerApi.of(serverContainer, launcher, connector, connectionStorage);
     }
 
     @Subscribe
     public void onProxyInitialize(ProxyInitializeEvent event) {
+        ProxyVirtualizerApiProvider.register(api);
         proxyServer.getCommandManager().register(
                 proxyServer.getCommandManager()
                         .metaBuilder("vserver")
@@ -60,6 +63,11 @@ public final class ProxyVirtualizerVelocityPlugin {
                 new VirtualServerCommand(serverContainer, proxyServer, launcher, connector, packetSender)
         );
         logger.info("ProxyVirtualizer initialized");
+    }
+
+    @Subscribe
+    public void onProxyShutdown(ProxyShutdownEvent event) {
+        ProxyVirtualizerApiProvider.unregister();
     }
 
     @Subscribe
