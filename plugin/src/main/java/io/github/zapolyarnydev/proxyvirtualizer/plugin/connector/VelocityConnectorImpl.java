@@ -87,7 +87,7 @@ public final class VelocityConnectorImpl implements Connector {
 
         return proxyServer.getAllServers().stream()
                 .findFirst()
-                .map(server -> send(player, server))
+                .map(server -> sendAndLeaveVirtualServer(player, server, false))
                 .orElse(false);
     }
 
@@ -100,11 +100,7 @@ public final class VelocityConnectorImpl implements Connector {
             return false;
         }
 
-        boolean sent = send(player, previous);
-        if (sent) {
-            previousServers.remove(player.getUniqueId());
-        }
-        return sent;
+        return sendAndLeaveVirtualServer(player, previous, true);
     }
 
     public void forgetPlayer(Player player) {
@@ -157,6 +153,19 @@ public final class VelocityConnectorImpl implements Connector {
             return false;
         }
         player.createConnectionRequest(server).fireAndForget();
+        return true;
+    }
+
+    private boolean sendAndLeaveVirtualServer(Player player, RegisteredServer server, boolean removePreviousOnSuccess) {
+        boolean sent = send(player, server);
+        if (!sent) {
+            return false;
+        }
+
+        connectionStorage.remove(player);
+        if (removePreviousOnSuccess) {
+            previousServers.remove(player.getUniqueId());
+        }
         return true;
     }
 }
