@@ -4,6 +4,7 @@ import io.github.zapolyarnydev.proxyvirtualizer.api.connector.ConnectionStorage;
 import io.github.zapolyarnydev.proxyvirtualizer.api.connector.Connector;
 import io.github.zapolyarnydev.proxyvirtualizer.api.registry.ServerContainer;
 import io.github.zapolyarnydev.proxyvirtualizer.api.server.Launcher;
+import io.github.zapolyarnydev.proxyvirtualizer.api.signal.SignalBus;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -15,13 +16,15 @@ public final class ProxyVirtualizerApi {
     private final Launcher launcher;
     private final Connector connector;
     private final ConnectionStorage connectionStorage;
+    private final SignalBus signalBus;
 
     public static ProxyVirtualizerApi of(
             ServerContainer serverContainer,
             Launcher launcher,
             Connector connector,
-            ConnectionStorage connectionStorage
+            ConnectionStorage connectionStorage,
+            SignalBus signalBus
     ) {
-        return new ProxyVirtualizerApi(serverContainer, launcher, connector, connectionStorage);
+        return new ProxyVirtualizerApi(serverContainer, launcher, connector, connectionStorage, signalBus);
     }
 }

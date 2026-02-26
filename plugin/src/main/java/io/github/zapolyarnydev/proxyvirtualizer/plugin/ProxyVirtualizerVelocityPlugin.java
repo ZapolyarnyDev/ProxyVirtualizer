@@ -13,12 +13,15 @@ import io.github.zapolyarnydev.proxyvirtualizer.api.connector.ConnectionStorage;
 import io.github.zapolyarnydev.proxyvirtualizer.api.connector.Connector;
 import io.github.zapolyarnydev.proxyvirtualizer.api.registry.ServerContainer;
 import io.github.zapolyarnydev.proxyvirtualizer.api.server.Launcher;
+import io.github.zapolyarnydev.proxyvirtualizer.api.signal.SignalBus;
 import io.github.zapolyarnydev.proxyvirtualizer.plugin.command.VirtualServerCommand;
 import io.github.zapolyarnydev.proxyvirtualizer.plugin.connector.InMemoryConnectionStorage;
 import io.github.zapolyarnydev.proxyvirtualizer.plugin.connector.VelocityConnectorImpl;
 import io.github.zapolyarnydev.proxyvirtualizer.plugin.packet.VelocityVirtualPacketSender;
 import io.github.zapolyarnydev.proxyvirtualizer.plugin.registry.InMemoryServerContainer;
 import io.github.zapolyarnydev.proxyvirtualizer.plugin.server.DefaultVirtualServerLauncher;
+import io.github.zapolyarnydev.proxyvirtualizer.plugin.signal.DefaultSignalBus;
+import io.github.zapolyarnydev.proxyvirtualizer.plugin.signal.VelocitySignalBridge;
 import org.slf4j.Logger;
 
 @Plugin(
@@ -36,6 +39,8 @@ public final class ProxyVirtualizerVelocityPlugin {
     private final VelocityConnectorImpl connector;
     private final VelocityVirtualPacketSender packetSender;
     private final Launcher launcher;
+    private final SignalBus signalBus;
+    private final VelocitySignalBridge signalBridge;
     private final ProxyVirtualizerApi api;
 
     @Inject
@@ -48,12 +53,15 @@ public final class ProxyVirtualizerVelocityPlugin {
         this.packetSender = new VelocityVirtualPacketSender(proxyServer, connectionStorage);
         this.connector = new VelocityConnectorImpl(proxyServer, connectionStorage, packetSender);
         this.launcher = new DefaultVirtualServerLauncher(proxyServer, serverContainer, connectionStorage, connector);
-        this.api = ProxyVirtualizerApi.of(serverContainer, launcher, connector, connectionStorage);
+        this.signalBus = new DefaultSignalBus(logger);
+        this.signalBridge = new VelocitySignalBridge(proxyServer, connectionStorage, signalBus, logger);
+        this.api = ProxyVirtualizerApi.of(serverContainer, launcher, connector, connectionStorage, signalBus);
     }
 
     @Subscribe
     public void onProxyInitialize(ProxyInitializeEvent event) {
         ProxyVirtualizerApiProvider.register(api);
+        proxyServer.getEventManager().register(this, signalBridge);
         proxyServer.getCommandManager().register(
                 proxyServer.getCommandManager()
                         .metaBuilder("vserver")
@@ -67,6 +75,7 @@ public final class ProxyVirtualizerVelocityPlugin {
 
     @Subscribe
     public void onProxyShutdown(ProxyShutdownEvent event) {
+        signalBridge.shutdown();
         ProxyVirtualizerApiProvider.unregister();
     }
 
@@ -98,6 +107,10 @@ public final class ProxyVirtualizerVelocityPlugin {
 
     public Launcher getLauncher() {
         return launcher;
+    }
+
+    public SignalBus getSignalBus() {
+        return signalBus;
     }
 
     public VelocityVirtualPacketSender getPacketSender() {
