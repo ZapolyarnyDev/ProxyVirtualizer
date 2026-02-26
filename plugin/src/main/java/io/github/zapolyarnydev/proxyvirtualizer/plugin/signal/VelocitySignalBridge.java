@@ -36,16 +36,15 @@ public final class VelocitySignalBridge {
     private static final String PIPELINE_HANDLER_MAIN = "handler";
     private static final String SIGNAL_TAP_PREFIX = "proxyvirtualizer-signal-tap-";
 
-    // 1.21.4 (769 protocol ver)
-    private static final int PACKET_ID_SET_PLAYER_POSITION_1_21_4 = 0x1D;
-    private static final int PACKET_ID_SET_PLAYER_POSITION_AND_ROTATION_1_21_4 = 0x1E;
-    private static final int PACKET_ID_SET_PLAYER_ROTATION_1_21_4 = 0x1F;
+    private static final int PACKET_ID_SET_PLAYER_POSITION_1_21_4 = 0x1C;
+    private static final int PACKET_ID_SET_PLAYER_POSITION_AND_ROTATION_1_21_4 = 0x1D;
+    private static final int PACKET_ID_SET_PLAYER_ROTATION_1_21_4 = 0x1E;
 
     private final ProxyServer proxyServer;
     private final ConnectionStorage connectionStorage;
     private final SignalBus signalBus;
     private final Logger logger;
-    private final Map<UUID, String> installedTapNames = new ConcurrentHashMap<>();
+    private final Map<UUID, TapRegistration> installedTapNames = new ConcurrentHashMap<>();
 
     public VelocitySignalBridge(
             ProxyServer proxyServer,
@@ -75,6 +74,10 @@ public final class VelocitySignalBridge {
         if (!connectionStorage.isInVirtualServer(player)) {
             return;
         }
+        ensurePacketTapInstalled(player);
+        if (hasInstalledPacketTap(player)) {
+            return;
+        }
         signalBus.publish(new PlayerChatSignal(player, new PlayerChatPayload(event.getMessage())));
     }
 
@@ -84,6 +87,10 @@ public final class VelocitySignalBridge {
             return;
         }
         if (!connectionStorage.isInVirtualServer(player)) {
+            return;
+        }
+        ensurePacketTapInstalled(player);
+        if (hasInstalledPacketTap(player)) {
             return;
         }
 
@@ -106,12 +113,34 @@ public final class VelocitySignalBridge {
         installedTapNames.clear();
     }
 
+    private boolean hasInstalledPacketTap(Player player) {
+        TapRegistration registration = installedTapNames.get(player.getUniqueId());
+        return registration != null && (registration.rawInstalled() || registration.decodedInstalled());
+    }
+
+    private void ensurePacketTapInstalled(Player player) {
+        if (hasInstalledPacketTap(player)) {
+            return;
+        }
+        installPacketTap(player);
+    }
+
+    private boolean hasRawPacketTap(Player player) {
+        TapRegistration registration = installedTapNames.get(player.getUniqueId());
+        return registration != null && registration.rawInstalled();
+    }
+
     private void installPacketTap(Player player) {
         Objects.requireNonNull(player, "player");
 
         UUID playerId = player.getUniqueId();
-        String tapName = SIGNAL_TAP_PREFIX + playerId;
-        String existing = installedTapNames.putIfAbsent(playerId, tapName);
+        TapRegistration tapRegistration = new TapRegistration(
+                SIGNAL_TAP_PREFIX + playerId + "-raw",
+                SIGNAL_TAP_PREFIX + playerId + "-decoded",
+                false,
+                false
+        );
+        TapRegistration existing = installedTapNames.putIfAbsent(playerId, tapRegistration);
         if (existing != null) {
             return;
         }
@@ -119,31 +148,27 @@ public final class VelocitySignalBridge {
         try {
             Object pipeline = resolvePipeline(player);
             if (pipeline == null) {
-                installedTapNames.remove(playerId, tapName);
+                installedTapNames.remove(playerId, tapRegistration);
                 return;
             }
 
-            if (getPipelineHandler(pipeline, tapName) != null) {
-                return;
-            }
-
-            Object handler = createInboundTapHandler(player);
-            if (!addAfter(pipeline, PIPELINE_HANDLER_MINECRAFT_DECODER, tapName, handler)
-                    && !addBefore(pipeline, PIPELINE_HANDLER_MAIN, tapName, handler)
-                    && !addLast(pipeline, tapName, handler)) {
-                installedTapNames.remove(playerId, tapName);
-                logger.debug("Failed to install signal packet tap for player {}", player.getUsername());
+            boolean rawInstalled = installRawPacketTap(player, pipeline, tapRegistration.rawTapName());
+            boolean decodedInstalled = installDecodedPacketTap(player, pipeline, tapRegistration.decodedTapName());
+            installedTapNames.put(playerId, tapRegistration.withInstalled(rawInstalled, decodedInstalled));
+            if (!rawInstalled && !decodedInstalled) {
+                installedTapNames.remove(playerId);
+                logger.debug("Failed to install signal packet taps for player {}", player.getUsername());
             }
         } catch (ReflectiveOperationException | RuntimeException exception) {
-            installedTapNames.remove(playerId, tapName);
-            logger.debug("Unable to install signal packet tap for player {}", player.getUsername(), exception);
+            installedTapNames.remove(playerId);
+            logger.debug("Unable to install signal packet taps for player {}", player.getUsername(), exception);
         }
     }
 
     private void uninstallPacketTap(Player player) {
         Objects.requireNonNull(player, "player");
-        String tapName = installedTapNames.remove(player.getUniqueId());
-        if (tapName == null) {
+        TapRegistration tapRegistration = installedTapNames.remove(player.getUniqueId());
+        if (tapRegistration == null) {
             return;
         }
 
@@ -152,13 +177,40 @@ public final class VelocitySignalBridge {
             if (pipeline == null) {
                 return;
             }
-            removePipelineHandler(pipeline, tapName);
+            removePipelineHandler(pipeline, tapRegistration.rawTapName());
+            removePipelineHandler(pipeline, tapRegistration.decodedTapName());
         } catch (ReflectiveOperationException | RuntimeException exception) {
-            logger.debug("Unable to remove signal packet tap for player {}", player.getUsername(), exception);
+            logger.debug("Unable to remove signal packet taps for player {}", player.getUsername(), exception);
         }
     }
 
-    private Object createInboundTapHandler(Player player) throws ClassNotFoundException {
+    private boolean installRawPacketTap(Player player, Object pipeline, String tapName) throws ReflectiveOperationException {
+        if (getPipelineHandler(pipeline, tapName) != null) {
+            return true;
+        }
+        Object handler = createInboundTapHandler(player, this::inspectRawInboundMessage);
+        if (addBefore(pipeline, PIPELINE_HANDLER_MINECRAFT_DECODER, tapName, handler)) {
+            return true;
+        }
+        logger.debug("Failed to install raw signal packet tap for player {}", player.getUsername());
+        return false;
+    }
+
+    private boolean installDecodedPacketTap(Player player, Object pipeline, String tapName) throws ReflectiveOperationException {
+        if (getPipelineHandler(pipeline, tapName) != null) {
+            return true;
+        }
+        Object handler = createInboundTapHandler(player, this::inspectDecodedInboundMessage);
+        if (addAfter(pipeline, PIPELINE_HANDLER_MINECRAFT_DECODER, tapName, handler)
+                || addBefore(pipeline, PIPELINE_HANDLER_MAIN, tapName, handler)
+                || addLast(pipeline, tapName, handler)) {
+            return true;
+        }
+        logger.debug("Failed to install decoded signal packet tap for player {}", player.getUsername());
+        return false;
+    }
+
+    private Object createInboundTapHandler(Player player, InboundInspector inspector) throws ClassNotFoundException {
         ClassLoader classLoader = player.getClass().getClassLoader();
         Class<?> channelInboundHandlerClass = Class.forName("io.netty.channel.ChannelInboundHandler", true, classLoader);
 
@@ -175,7 +227,7 @@ public final class VelocitySignalBridge {
             try {
                 return switch (methodName) {
                     case "channelRead" -> {
-                        inspectInboundMessage(player, args[1]);
+                        inspector.inspect(player, args[1]);
                         invokeContext(args[0], "fireChannelRead", new Class<?>[]{Object.class}, new Object[]{args[1]});
                         yield null;
                     }
@@ -230,18 +282,41 @@ public final class VelocitySignalBridge {
     }
 
     private void inspectInboundMessage(Player player, Object message) {
+        inspectDecodedInboundMessage(player, message);
+        inspectRawInboundMessage(player, message);
+    }
+
+    private void inspectDecodedInboundMessage(Player player, Object message) {
         if (!connectionStorage.isInVirtualServer(player)) {
+            return;
+        }
+        if (message == null) {
+            return;
+        }
+
+        inspectDecodedChatOrCommandPacket(player, message);
+        inspectDecodedMovementPacket(player, message);
+        if (!hasRawPacketTap(player) && isByteBuf(message)) {
+            inspectRawInboundMessage(player, message);
+        }
+    }
+
+    private void inspectRawInboundMessage(Player player, Object message) {
+        if (!connectionStorage.isInVirtualServer(player)) {
+            return;
+        }
+        if (message == null) {
             return;
         }
         if (!ProtocolVersion.MINECRAFT_1_21_4.equals(player.getProtocolVersion())) {
             return;
         }
-        if (message == null || !isByteBuf(message)) {
+        if (!isByteBuf(message)) {
             return;
         }
 
         try {
-            Object copy = message.getClass().getMethod("duplicate").invoke(message);
+            Object copy = duplicateByteBuf(message);
             int packetId = readVarInt(copy);
             switch (packetId) {
                 case PACKET_ID_SET_PLAYER_POSITION_1_21_4 -> publishPosition(player, copy, PlayerPacketSignalKind.POSITION);
@@ -253,6 +328,123 @@ public final class VelocitySignalBridge {
         } catch (ReflectiveOperationException | RuntimeException exception) {
             logger.debug("Failed to inspect inbound packet for player {}", player.getUsername(), exception);
         }
+    }
+
+    private boolean inspectDecodedChatOrCommandPacket(Player player, Object message) {
+        String className = message.getClass().getName();
+
+        try {
+            if (className.endsWith("SessionPlayerChatPacket") || className.endsWith("KeyedPlayerChatPacket")) {
+                String chatMessage = tryInvokeStringGetter(message, "getMessage");
+                if (chatMessage != null) {
+                    signalBus.publish(new PlayerChatSignal(player, new PlayerChatPayload(chatMessage)));
+                    return true;
+                }
+            }
+
+            if (className.endsWith("LegacyChatPacket")) {
+                String legacyMessage = tryInvokeStringGetter(message, "getMessage");
+                if (legacyMessage != null) {
+                    if (legacyMessage.startsWith("/")) {
+                        publishCommandFromRaw(player, legacyMessage.substring(1), "PLAYER", "UNSUPPORTED");
+                    } else {
+                        signalBus.publish(new PlayerChatSignal(player, new PlayerChatPayload(legacyMessage)));
+                    }
+                    return true;
+                }
+            }
+
+            if (className.endsWith("SessionPlayerCommandPacket")
+                    || className.endsWith("UnsignedPlayerCommandPacket")
+                    || className.endsWith("KeyedPlayerCommandPacket")) {
+                String command = tryInvokeStringGetter(message, "getCommand");
+                if (command != null) {
+                    String signedState = resolveSignedStateName(message);
+                    publishCommandFromRaw(player, command, "PLAYER", signedState);
+                    return true;
+                }
+            }
+        } catch (ReflectiveOperationException | RuntimeException exception) {
+            logger.debug("Failed to inspect decoded chat/command packet for player {}", player.getUsername(), exception);
+        }
+
+        return false;
+    }
+
+    private boolean inspectDecodedMovementPacket(Player player, Object message) {
+        String className = message.getClass().getName();
+        if (!className.contains("MovePlayerPacket")) {
+            return false;
+        }
+
+        try {
+            Double x = tryInvokeDoubleGetter(message, "getX");
+            Double y = tryInvokeDoubleGetter(message, "getY");
+            Double z = tryInvokeDoubleGetter(message, "getZ");
+            Float yaw = firstNonNull(
+                    tryInvokeFloatGetter(message, "getYaw"),
+                    tryInvokeFloatGetter(message, "getYRot")
+            );
+            Float pitch = firstNonNull(
+                    tryInvokeFloatGetter(message, "getPitch"),
+                    tryInvokeFloatGetter(message, "getXRot")
+            );
+            int flags = resolveMovementFlags(message);
+
+            boolean hasPosition = x != null && y != null && z != null;
+            boolean hasRotation = yaw != null && pitch != null;
+            if (!hasPosition && !hasRotation) {
+                return false;
+            }
+
+            if (hasPosition && hasRotation) {
+                signalBus.publish(new PlayerMoveSignal(player, new PlayerMovePayload(
+                        x, y, z,
+                        isOnGround(flags),
+                        hasHorizontalCollision(flags),
+                        PlayerPacketSignalKind.POSITION_AND_ROTATION
+                )));
+                signalBus.publish(new PlayerLookSignal(player, new PlayerLookPayload(
+                        yaw, pitch,
+                        isOnGround(flags),
+                        hasHorizontalCollision(flags),
+                        PlayerPacketSignalKind.POSITION_AND_ROTATION
+                )));
+                return true;
+            }
+
+            if (hasPosition) {
+                signalBus.publish(new PlayerMoveSignal(player, new PlayerMovePayload(
+                        x, y, z,
+                        isOnGround(flags),
+                        hasHorizontalCollision(flags),
+                        PlayerPacketSignalKind.POSITION
+                )));
+                return true;
+            }
+
+            signalBus.publish(new PlayerLookSignal(player, new PlayerLookPayload(
+                    yaw, pitch,
+                    isOnGround(flags),
+                    hasHorizontalCollision(flags),
+                    PlayerPacketSignalKind.ROTATION
+            )));
+            return true;
+        } catch (ReflectiveOperationException | RuntimeException exception) {
+            logger.debug("Failed to inspect decoded movement packet for player {}", player.getUsername(), exception);
+            return false;
+        }
+    }
+
+    private void publishCommandFromRaw(Player player, String rawCommand, String invocationSource, String signedState) {
+        CommandParts parts = splitCommand(rawCommand);
+        signalBus.publish(new PlayerCommandSignal(player, new PlayerCommandPayload(
+                rawCommand,
+                parts.label(),
+                List.copyOf(parts.arguments()),
+                invocationSource,
+                signedState
+        )));
     }
 
     private void publishPosition(Player player, Object byteBuf, PlayerPacketSignalKind kind)
@@ -326,6 +518,102 @@ public final class VelocitySignalBridge {
         return "io.netty.buffer.ByteBuf".equals(className) || inheritsFrom(value.getClass(), "io.netty.buffer.ByteBuf");
     }
 
+    private static String tryInvokeStringGetter(Object target, String methodName) throws ReflectiveOperationException {
+        Object result = target.getClass().getMethod(methodName).invoke(target);
+        return result instanceof String value ? value : null;
+    }
+
+    private static Double tryInvokeDoubleGetter(Object target, String methodName) throws ReflectiveOperationException {
+        try {
+            Object result = target.getClass().getMethod(methodName).invoke(target);
+            return result instanceof Number number ? number.doubleValue() : null;
+        } catch (NoSuchMethodException ignored) {
+            return null;
+        }
+    }
+
+    private static Float tryInvokeFloatGetter(Object target, String methodName) throws ReflectiveOperationException {
+        try {
+            Object result = target.getClass().getMethod(methodName).invoke(target);
+            return result instanceof Number number ? number.floatValue() : null;
+        } catch (NoSuchMethodException ignored) {
+            return null;
+        }
+    }
+
+    private static int resolveMovementFlags(Object packet) throws ReflectiveOperationException {
+        try {
+            Object flags = packet.getClass().getMethod("getFlags").invoke(packet);
+            Integer resolved = coerceFlags(flags);
+            if (resolved != null) {
+                return resolved;
+            }
+        } catch (NoSuchMethodException ignored) {
+        }
+
+        int flags = 0;
+        Boolean onGround = tryInvokeBooleanGetter(packet, "isOnGround");
+        Boolean horizontalCollision = tryInvokeBooleanGetter(packet, "hasHorizontalCollision");
+        if (horizontalCollision == null) {
+            horizontalCollision = tryInvokeBooleanGetter(packet, "isHorizontalCollision");
+        }
+        if (onGround != null && onGround) {
+            flags |= 0x01;
+        }
+        if (horizontalCollision != null && horizontalCollision) {
+            flags |= 0x02;
+        }
+        return flags;
+    }
+
+    private static Boolean tryInvokeBooleanGetter(Object target, String methodName) throws ReflectiveOperationException {
+        try {
+            Object result = target.getClass().getMethod(methodName).invoke(target);
+            return result instanceof Boolean value ? value : null;
+        } catch (NoSuchMethodException ignored) {
+            return null;
+        }
+    }
+
+    private static Integer coerceFlags(Object flags) throws ReflectiveOperationException {
+        if (flags == null) {
+            return null;
+        }
+        if (flags instanceof Number number) {
+            return number.intValue();
+        }
+        for (String getter : List.of("getBits", "bits", "getMask", "mask", "value", "getValue")) {
+            try {
+                Object result = flags.getClass().getMethod(getter).invoke(flags);
+                if (result instanceof Number number) {
+                    return number.intValue();
+                }
+            } catch (NoSuchMethodException ignored) {
+            }
+        }
+        return null;
+    }
+
+    private static String resolveSignedStateName(Object packet) {
+        try {
+            Object state = packet.getClass().getMethod("getEventSignedState").invoke(packet);
+            if (state instanceof Enum<?> enumValue) {
+                return enumValue.name();
+            }
+        } catch (ReflectiveOperationException ignored) {
+        }
+
+        try {
+            Object signed = packet.getClass().getMethod("isSigned").invoke(packet);
+            if (signed instanceof Boolean signedBoolean) {
+                return signedBoolean ? "SIGNED_WITHOUT_ARGS" : "UNSIGNED";
+            }
+        } catch (ReflectiveOperationException ignored) {
+        }
+
+        return "UNSUPPORTED";
+    }
+
     private static boolean inheritsFrom(Class<?> type, String fqcn) {
         Class<?> current = type;
         while (current != null) {
@@ -347,7 +635,8 @@ public final class VelocitySignalBridge {
         int result = 0;
         byte read;
         do {
-            read = (byte) ((int) byteBuf.getClass().getMethod("readByte").invoke(byteBuf));
+            Number readValue = (Number) invokeByteBufMethod(byteBuf, "readByte", new Class<?>[0], new Object[0]);
+            read = readValue.byteValue();
             int value = read & 0b0111_1111;
             result |= (value << (7 * numRead));
             numRead++;
@@ -359,15 +648,31 @@ public final class VelocitySignalBridge {
     }
 
     private static double readDouble(Object byteBuf) throws ReflectiveOperationException {
-        return (double) byteBuf.getClass().getMethod("readDouble").invoke(byteBuf);
+        return (double) invokeByteBufMethod(byteBuf, "readDouble", new Class<?>[0], new Object[0]);
     }
 
     private static float readFloat(Object byteBuf) throws ReflectiveOperationException {
-        return (float) byteBuf.getClass().getMethod("readFloat").invoke(byteBuf);
+        return (float) invokeByteBufMethod(byteBuf, "readFloat", new Class<?>[0], new Object[0]);
     }
 
     private static int readUnsignedByte(Object byteBuf) throws ReflectiveOperationException {
-        return (int) byteBuf.getClass().getMethod("readUnsignedByte").invoke(byteBuf);
+        Number value = (Number) invokeByteBufMethod(byteBuf, "readUnsignedByte", new Class<?>[0], new Object[0]);
+        return value.intValue();
+    }
+
+    private static Object duplicateByteBuf(Object byteBuf) throws ReflectiveOperationException {
+        return invokeByteBufMethod(byteBuf, "duplicate", new Class<?>[0], new Object[0]);
+    }
+
+    private static Object invokeByteBufMethod(Object byteBuf, String methodName, Class<?>[] parameterTypes, Object[] args)
+            throws ReflectiveOperationException {
+        ClassLoader classLoader = byteBuf.getClass().getClassLoader();
+        try {
+            Class<?> byteBufClass = Class.forName("io.netty.buffer.ByteBuf", true, classLoader);
+            return byteBufClass.getMethod(methodName, parameterTypes).invoke(byteBuf, args);
+        } catch (ClassNotFoundException exception) {
+            throw new NoSuchMethodException("io.netty.buffer.ByteBuf not found");
+        }
     }
 
     private static Object resolvePipeline(Player player) throws ReflectiveOperationException {
@@ -436,7 +741,13 @@ public final class VelocitySignalBridge {
 
     private static Object invokeContext(Object context, String methodName, Class<?>[] parameterTypes, Object[] args)
             throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
-        return context.getClass().getMethod(methodName, parameterTypes).invoke(context, args);
+        ClassLoader classLoader = context.getClass().getClassLoader();
+        try {
+            Class<?> channelHandlerContextClass = Class.forName("io.netty.channel.ChannelHandlerContext", true, classLoader);
+            return channelHandlerContextClass.getMethod(methodName, parameterTypes).invoke(context, args);
+        } catch (ClassNotFoundException exception) {
+            throw new NoSuchMethodException("io.netty.channel.ChannelHandlerContext not found");
+        }
     }
 
     private static Object defaultReturnValue(Class<?> returnType) {
@@ -494,5 +805,20 @@ public final class VelocitySignalBridge {
     }
 
     private record CommandParts(String label, List<String> arguments) {
+    }
+
+    private static <T> T firstNonNull(T first, T second) {
+        return first != null ? first : second;
+    }
+
+    private record TapRegistration(String rawTapName, String decodedTapName, boolean rawInstalled, boolean decodedInstalled) {
+        private TapRegistration withInstalled(boolean rawInstalled, boolean decodedInstalled) {
+            return new TapRegistration(rawTapName, decodedTapName, rawInstalled, decodedInstalled);
+        }
+    }
+
+    @FunctionalInterface
+    private interface InboundInspector {
+        void inspect(Player player, Object message);
     }
 }
