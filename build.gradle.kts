@@ -10,7 +10,7 @@ group = projectGroup
 version = projectVersion
 
 subprojects {
-    apply(plugin = "java-library")
+    apply(plugin = "proxyvirtualizer.java-conventions")
     apply(plugin = "proxyvirtualizer.spotless-conventions")
 
     group = projectGroup
@@ -21,13 +21,6 @@ subprojects {
         annotationProcessor(rootProject.libs.lombok)
 
         compileOnly(rootProject.libs.velocity.api)
-    }
-
-    java {
-        toolchain {
-            languageVersion.set(JavaLanguageVersion.of(21))
-        }
-        withSourcesJar()
     }
 
     val strict = providers.gradleProperty("strict").map { it.toBoolean() }.orElse(false)
