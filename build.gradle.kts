@@ -42,3 +42,14 @@ subprojects {
 tasks.named<Jar>("jar") {
     enabled = false
 }
+
+tasks.register("installGitHooks") {
+    group = "git"
+    description = "Installs the project's Git hooks"
+
+    doLast {
+        providers.exec {
+            commandLine("git", "config", "--local", "core.hooksPath", ".githooks")
+        }.result.get().assertNormalExitValue()
+    }
+}
