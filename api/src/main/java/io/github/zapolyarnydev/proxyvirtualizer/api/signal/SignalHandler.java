@@ -7,5 +7,5 @@ package io.github.zapolyarnydev.proxyvirtualizer.api.signal;
  */
 @FunctionalInterface
 public interface SignalHandler<T extends Signal<?, ?>> {
-    void handle(T signal);
+  void handle(T signal);
 }

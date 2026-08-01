@@ -5,14 +5,13 @@ import io.github.zapolyarnydev.proxyvirtualizer.api.exception.PlayerAlreadyConne
 import io.github.zapolyarnydev.proxyvirtualizer.api.server.VirtualServer;
 
 public interface Connector {
-    boolean connect(VirtualServer server, Player player) throws PlayerAlreadyConnectedException;
+  boolean connect(VirtualServer server, Player player) throws PlayerAlreadyConnectedException;
 
-    boolean disconnect(Player player);
+  boolean disconnect(Player player);
 
-    void disconnectAll();
+  void disconnectAll();
 
-    boolean sendToGameServer(Player player);
+  boolean sendToGameServer(Player player);
 
-    boolean sendToPreviousServer(Player player);
-
+  boolean sendToPreviousServer(Player player);
 }

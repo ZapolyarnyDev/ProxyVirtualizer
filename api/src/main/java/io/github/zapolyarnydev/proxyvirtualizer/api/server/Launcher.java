@@ -4,7 +4,7 @@ import io.github.zapolyarnydev.proxyvirtualizer.api.exception.VirtualServerAlrea
 
 public interface Launcher {
 
-    VirtualServer launch(String name) throws VirtualServerAlreadyLaunchedException;
+  VirtualServer launch(String name) throws VirtualServerAlreadyLaunchedException;
 
-    void stop(String name);
+  void stop(String name);
 }

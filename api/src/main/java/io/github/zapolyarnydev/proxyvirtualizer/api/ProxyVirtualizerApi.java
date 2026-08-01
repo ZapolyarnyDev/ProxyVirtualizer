@@ -12,19 +12,19 @@ import lombok.Getter;
 @AllArgsConstructor(access = AccessLevel.PRIVATE)
 @Getter
 public final class ProxyVirtualizerApi {
-    private final ServerContainer serverContainer;
-    private final Launcher launcher;
-    private final Connector connector;
-    private final ConnectionStorage connectionStorage;
-    private final SignalBus signalBus;
+  private final ServerContainer serverContainer;
+  private final Launcher launcher;
+  private final Connector connector;
+  private final ConnectionStorage connectionStorage;
+  private final SignalBus signalBus;
 
-    public static ProxyVirtualizerApi of(
-            ServerContainer serverContainer,
-            Launcher launcher,
-            Connector connector,
-            ConnectionStorage connectionStorage,
-            SignalBus signalBus
-    ) {
-        return new ProxyVirtualizerApi(serverContainer, launcher, connector, connectionStorage, signalBus);
-    }
+  public static ProxyVirtualizerApi of(
+      ServerContainer serverContainer,
+      Launcher launcher,
+      Connector connector,
+      ConnectionStorage connectionStorage,
+      SignalBus signalBus) {
+    return new ProxyVirtualizerApi(
+        serverContainer, launcher, connector, connectionStorage, signalBus);
+  }
 }

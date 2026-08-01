@@ -4,5 +4,4 @@ import com.velocitypowered.api.proxy.Player;
 import io.github.zapolyarnydev.proxyvirtualizer.api.signal.Signal;
 
 public record PlayerLookSignal(Player source, PlayerLookPayload payload)
-        implements Signal<Player, PlayerLookPayload> {
-}
+    implements Signal<Player, PlayerLookPayload> {}

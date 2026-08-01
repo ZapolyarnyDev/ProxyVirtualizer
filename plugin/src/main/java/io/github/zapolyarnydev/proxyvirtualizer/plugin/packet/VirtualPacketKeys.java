@@ -2,16 +2,15 @@ package io.github.zapolyarnydev.proxyvirtualizer.plugin.packet;
 
 public final class VirtualPacketKeys {
 
-    public static final String KEEP_ALIVE = "clientbound.keep_alive";
-    public static final String CHAT = "clientbound.chat";
-    public static final String ACTION_BAR = "clientbound.action_bar";
-    public static final String TITLE = "clientbound.title";
-    public static final String GAME_EVENT = "clientbound.game_event";
-    public static final String PLAYER_POSITION = "clientbound.player_position";
-    public static final String RESPAWN = "clientbound.respawn";
-    public static final String DISCONNECT = "clientbound.disconnect";
-    public static final String LIMBO_BOOTSTRAP = "virtual.limbo.bootstrap";
+  public static final String KEEP_ALIVE = "clientbound.keep_alive";
+  public static final String CHAT = "clientbound.chat";
+  public static final String ACTION_BAR = "clientbound.action_bar";
+  public static final String TITLE = "clientbound.title";
+  public static final String GAME_EVENT = "clientbound.game_event";
+  public static final String PLAYER_POSITION = "clientbound.player_position";
+  public static final String RESPAWN = "clientbound.respawn";
+  public static final String DISCONNECT = "clientbound.disconnect";
+  public static final String LIMBO_BOOTSTRAP = "virtual.limbo.bootstrap";
 
-    private VirtualPacketKeys() {
-    }
+  private VirtualPacketKeys() {}
 }
