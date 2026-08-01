@@ -3,6 +3,7 @@ val projectVersion = "1.1.2"
 
 plugins {
     id("java")
+    id("proxyvirtualizer.spotless-conventions")
 }
 
 group = projectGroup
@@ -10,6 +11,7 @@ version = projectVersion
 
 subprojects {
     apply(plugin = "java-library")
+    apply(plugin = "proxyvirtualizer.spotless-conventions")
 
     group = projectGroup
     version = projectVersion
