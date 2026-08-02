@@ -1,6 +1,7 @@
 dependencies {
     compileOnly(rootProject.libs.lombok)
     annotationProcessor(rootProject.libs.lombok)
+    compileOnlyApi(rootProject.libs.jetbrains.annotations)
     compileOnly(rootProject.libs.velocity.api)
 }
 
