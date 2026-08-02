@@ -2,8 +2,12 @@
 lombok = "1.18.46"
 velocity = "3.4.0-SNAPSHOT"
 jetbrains-annotations = "26.1.0"
+junit = "6.1.0"
+assertj = "3.27.6"
 
 [libraries]
 lombok = { module = "org.projectlombok:lombok", version.ref = "lombok" }
 velocity-api = { module = "com.velocitypowered:velocity-api", version.ref = "velocity" }
 jetbrains-annotations = { module = "org.jetbrains:annotations", version.ref = "jetbrains-annotations" }
+junit-jupiter = { module = "org.junit.jupiter:junit-jupiter", version.ref = "junit" }
+assertj-core = { module = "org.assertj:assertj-core", version.ref = "assertj" }

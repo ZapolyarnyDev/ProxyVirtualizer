@@ -14,6 +14,7 @@ subprojects {
     apply(plugin = "proxyvirtualizer.java-conventions")
     apply(plugin = "proxyvirtualizer.spotless-conventions")
     apply(plugin = "proxyvirtualizer.quality-conventions")
+    apply(plugin = "proxyvirtualizer.test-conventions")
 
     group = projectGroup
     version = projectVersion
