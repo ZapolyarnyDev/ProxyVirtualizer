@@ -7,6 +7,7 @@ val libraries = rootProject.extensions.getByType<VersionCatalogsExtension>().nam
 
 dependencies {
     add("testImplementation", libraries.findLibrary("junit-jupiter").get())
+    add("testRuntimeOnly", libraries.findLibrary("junit-platform-launcher").get())
     add("testImplementation", libraries.findLibrary("assertj-core").get())
 }
 
