@@ -3,15 +3,22 @@ import org.gradle.api.tasks.SourceSetContainer
 import org.gradle.jvm.tasks.Jar
 
 dependencies {
-    implementation(project(":api"))
+    implementation(project(":virtualizer-api"))
+    implementation(project(":velocity-adapter"))
     compileOnly(rootProject.libs.velocity.api)
     annotationProcessor(rootProject.libs.velocity.api)
 }
 
 tasks.named<Jar>("jar") {
-    dependsOn(":api:classes")
+    dependsOn(":virtualizer-api:classes")
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-    from(project(":api").extensions.getByType(SourceSetContainer::class.java).getByName("main").output)
+    from(
+        project(":virtualizer-api")
+            .extensions
+            .getByType(SourceSetContainer::class.java)
+            .getByName("main")
+            .output
+    )
 }
 
 tasks.named<Jar>("jar") {

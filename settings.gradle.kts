@@ -11,4 +11,8 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "ProxyVirtualizer"
-include("plugin", "api")
+include("velocity-plugin", "virtualizer-api")
+include("virtualizer-protocol-api")
+include("virtualizer-protocol")
+include("core")
+include("velocity-adapter")
