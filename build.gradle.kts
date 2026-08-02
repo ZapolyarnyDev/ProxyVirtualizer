@@ -2,8 +2,9 @@ val projectGroup = "io.github.zapolyarnydev"
 val projectVersion = "1.1.2"
 
 plugins {
-    id("java")
+    id("base")
     id("proxyvirtualizer.spotless-conventions")
+    id("proxyvirtualizer.quality-conventions")
 }
 
 group = projectGroup
@@ -12,28 +13,10 @@ version = projectVersion
 subprojects {
     apply(plugin = "proxyvirtualizer.java-conventions")
     apply(plugin = "proxyvirtualizer.spotless-conventions")
+    apply(plugin = "proxyvirtualizer.quality-conventions")
 
     group = projectGroup
     version = projectVersion
-
-    dependencies {
-        compileOnly(rootProject.libs.lombok)
-        annotationProcessor(rootProject.libs.lombok)
-
-        compileOnly(rootProject.libs.velocity.api)
-    }
-
-    val strict = providers.gradleProperty("strict").map { it.toBoolean() }.orElse(false)
-
-    tasks.withType<JavaCompile>().configureEach {
-        options.compilerArgs.addAll(listOf("-Xlint:all"))
-        if (strict.get())
-            options.compilerArgs.add("-Werror")
-    }
-}
-
-tasks.named<Jar>("jar") {
-    enabled = false
 }
 
 tasks.register("installGitHooks") {

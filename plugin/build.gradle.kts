@@ -3,7 +3,8 @@ import org.gradle.api.tasks.SourceSetContainer
 import org.gradle.jvm.tasks.Jar
 
 dependencies {
-    api(project(":api"))
+    implementation(project(":api"))
+    compileOnly(rootProject.libs.velocity.api)
     annotationProcessor(rootProject.libs.velocity.api)
 }
 
