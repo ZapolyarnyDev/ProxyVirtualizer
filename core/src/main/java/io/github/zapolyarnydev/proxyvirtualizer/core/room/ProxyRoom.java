@@ -2,7 +2,6 @@ package io.github.zapolyarnydev.proxyvirtualizer.core.room;
 
 import io.github.zapolyarnydev.proxyvirtualizer.core.room.exception.ProxyRoomFullException;
 import io.github.zapolyarnydev.proxyvirtualizer.core.room.exception.SessionAlreadyExistsException;
-import io.github.zapolyarnydev.proxyvirtualizer.core.room.exception.SessionNotFoundException;
 import io.github.zapolyarnydev.proxyvirtualizer.core.session.ConnectionId;
 import io.github.zapolyarnydev.proxyvirtualizer.core.session.PlayerId;
 import io.github.zapolyarnydev.proxyvirtualizer.core.session.Session;
@@ -16,15 +15,16 @@ import org.jetbrains.annotations.NotNull;
 
 public final class ProxyRoom {
 
-  private final long id;
+  private final RoomId id;
   private final Map<PlayerId, Session> sessionsByPlayer = new LinkedHashMap<>();
   private SessionLimit sessionLimit = SessionLimit.unlimited();
 
-  public ProxyRoom(long id) {
-    this.id = id;
+  public ProxyRoom(@NotNull RoomId id) {
+    this.id = Objects.requireNonNull(id, "id");
   }
 
-  public long id() {
+  @NotNull
+  public RoomId id() {
     return id;
   }
 
@@ -58,13 +58,7 @@ public final class ProxyRoom {
     ensureConnectionIsFree(connectionId);
     ensureRoomHasCapacity();
 
-    Session session = Session.create(playerId, connectionId, clock);
-    sessionsByPlayer.put(playerId, session);
-    return session;
-  }
-
-  public Session activateSession(@NotNull PlayerId playerId) {
-    Session session = requireSession(playerId).activate();
+    Session session = Session.create(playerId, connectionId, clock).activate();
     sessionsByPlayer.put(playerId, session);
     return session;
   }
@@ -82,14 +76,6 @@ public final class ProxyRoom {
   private boolean hasConnection(@NotNull ConnectionId connectionId) {
     return sessionsByPlayer.values().stream()
         .anyMatch(session -> session.connectionId().equals(connectionId));
-  }
-
-  private Session requireSession(@NotNull PlayerId playerId) {
-    Session session = sessionsByPlayer.get(playerId);
-    if (session == null)
-      throw new SessionNotFoundException("No session belongs to player: " + playerId);
-
-    return session;
   }
 
   private void ensurePlayerHasNoSession(PlayerId playerId) {

@@ -9,4 +9,8 @@ public record ConnectionId(@NotNull UUID id) {
   public ConnectionId {
     Objects.requireNonNull(id, "id");
   }
+
+  public static ConnectionId random() {
+    return new ConnectionId(UUID.randomUUID());
+  }
 }

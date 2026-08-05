@@ -21,20 +21,18 @@ final class ProxyRoomTest {
 
   @Test
   void opensAndActivatesSession() {
-    ProxyRoom room = new ProxyRoom(1L);
+    ProxyRoom room = new ProxyRoom(new RoomId(1));
     PlayerId playerId = playerId();
 
-    Session created = room.openSession(playerId, connectionId(), CLOCK);
-    Session active = room.activateSession(playerId);
+    Session active = room.openSession(playerId, connectionId(), CLOCK);
 
-    assertThat(created.state()).isEqualTo(SessionState.INITIALIZING);
     assertThat(active.state()).isEqualTo(SessionState.ACTIVE);
     assertThat(room.findSession(playerId)).contains(active);
   }
 
   @Test
   void rejectsAnotherSessionForTheSamePlayer() {
-    ProxyRoom room = new ProxyRoom(1L);
+    ProxyRoom room = new ProxyRoom(new RoomId(1));
     PlayerId playerId = playerId();
     room.openSession(playerId, connectionId(), CLOCK);
 
@@ -44,7 +42,7 @@ final class ProxyRoomTest {
 
   @Test
   void closesSessionAndAllowsReconnect() {
-    ProxyRoom room = new ProxyRoom(1L);
+    ProxyRoom room = new ProxyRoom(new RoomId(1));
     PlayerId playerId = playerId();
     ConnectionId connectionId = connectionId();
     room.openSession(playerId, connectionId, CLOCK);
@@ -57,7 +55,7 @@ final class ProxyRoomTest {
 
   @Test
   void rejectsNewSessionWhenAtCapacity() {
-    ProxyRoom room = new ProxyRoom(1L);
+    ProxyRoom room = new ProxyRoom(new RoomId(1));
     room.limitRoomSessions(1);
     room.openSession(playerId(), connectionId(), CLOCK);
 
