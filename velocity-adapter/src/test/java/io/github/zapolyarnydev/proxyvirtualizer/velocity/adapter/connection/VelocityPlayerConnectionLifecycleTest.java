@@ -42,6 +42,20 @@ class VelocityPlayerConnectionLifecycleTest {
         .isEqualTo(recordingLifecycle.connectedConnectionId);
   }
 
+  @Test
+  void assignsDistinctConnectionIdentitiesToSeparateVelocityConnections() {
+    RecordingLifecycle recordingLifecycle = new RecordingLifecycle();
+    VelocityPlayerConnectionLifecycle lifecycle =
+        new VelocityPlayerConnectionLifecycle(recordingLifecycle);
+    UUID playerUniqueId = UUID.randomUUID();
+
+    lifecycle.playerConnected(player(playerUniqueId));
+    ConnectionId firstConnectionId = recordingLifecycle.connectedConnectionId;
+    lifecycle.playerConnected(player(playerUniqueId));
+
+    assertThat(recordingLifecycle.connectedConnectionId).isNotEqualTo(firstConnectionId);
+  }
+
   private static Player player(UUID uniqueId) {
     return (Player)
         Proxy.newProxyInstance(
