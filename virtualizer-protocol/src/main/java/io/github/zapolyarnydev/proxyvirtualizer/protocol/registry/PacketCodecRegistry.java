@@ -1,12 +1,12 @@
 package io.github.zapolyarnydev.proxyvirtualizer.protocol.registry;
 
-import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.ProtocolPhase;
-import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.ProtocolProfileId;
-import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.ProtocolVersion;
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.packet.codec.PacketCodec;
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.packet.id.PacketId;
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.packet.model.PacketDirection;
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.packet.model.ProtocolPacket;
+import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.profile.ProtocolPhase;
+import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.profile.ProtocolProfileId;
+import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.profile.ProtocolVersion;
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.exception.DuplicatePacketCodecException;
 import java.util.HashMap;
 import java.util.Map;

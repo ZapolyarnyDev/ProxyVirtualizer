@@ -1,10 +1,10 @@
 package io.github.zapolyarnydev.proxyvirtualizer.protocol.registry;
 
-import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.ProtocolCapability;
-import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.ProtocolPhase;
-import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.ProtocolProfile;
-import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.ProtocolProfileId;
-import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.ProtocolVersion;
+import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.profile.ProtocolCapability;
+import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.profile.ProtocolPhase;
+import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.profile.ProtocolProfile;
+import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.profile.ProtocolProfileId;
+import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.profile.ProtocolVersion;
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.exception.DuplicateProtocolProfileException;
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.exception.OverlappingProtocolVersionRangeException;
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.exception.UnknownProtocolProfileException;

@@ -1,4 +1,4 @@
-package io.github.zapolyarnydev.proxyvirtualizer.protocol.api.packet.handler;
+package io.github.zapolyarnydev.proxyvirtualizer.protocol.api.action;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -16,31 +16,29 @@ import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 
-final class PacketHandlerTest {
+final class PacketActionMapperTest {
 
   @Test
-  void receivesContextAndCanSendClientboundPacket() {
-    List<ClientboundPacket> sentPackets = new ArrayList<>();
-    ProtocolContext context = new TestProtocolContext(sentPackets);
-    PacketHandler<TestServerboundPacket> handler =
-        (receivedContext, packet) -> {
-          assertThat(receivedContext.profile().versions().contains(new ProtocolVersion(769)))
-              .isTrue();
-          assertThat(receivedContext.phase()).isEqualTo(ProtocolPhase.PLAY);
-          receivedContext.send(new TestClientboundPacket());
+  void canPublishMultipleSemanticActions() {
+    PacketActionMapper<TestPacket> mapper =
+        (context, packet, actions) -> {
+          actions.accept(new FirstAction());
+          actions.accept(new SecondAction());
         };
+    List<SemanticAction> actions = new ArrayList<>();
 
-    handler.handle(context, new TestServerboundPacket());
+    mapper.map(new TestProtocolContext(), new TestPacket(), actions::add);
 
-    assertThat(sentPackets).containsExactly(new TestClientboundPacket());
+    assertThat(actions).containsExactly(new FirstAction(), new SecondAction());
   }
 
-  private record TestServerboundPacket() implements ServerboundPacket {}
+  private record TestPacket() implements ServerboundPacket {}
 
-  private record TestClientboundPacket() implements ClientboundPacket {}
+  private record FirstAction() implements SemanticAction {}
 
-  private record TestProtocolContext(List<ClientboundPacket> sentPackets)
-      implements ProtocolContext {
+  private record SecondAction() implements SemanticAction {}
+
+  private static final class TestProtocolContext implements ProtocolContext {
 
     @Override
     public ProtocolProfile profile() {
@@ -73,8 +71,6 @@ final class PacketHandlerTest {
     }
 
     @Override
-    public void send(ClientboundPacket packet) {
-      sentPackets.add(packet);
-    }
+    public void send(ClientboundPacket packet) {}
   }
 }

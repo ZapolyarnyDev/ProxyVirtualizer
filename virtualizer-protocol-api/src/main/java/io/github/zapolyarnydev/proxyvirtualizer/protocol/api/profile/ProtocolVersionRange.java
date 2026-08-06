@@ -1,4 +1,4 @@
-package io.github.zapolyarnydev.proxyvirtualizer.protocol.api;
+package io.github.zapolyarnydev.proxyvirtualizer.protocol.api.profile;
 
 import java.util.Objects;
 import org.jetbrains.annotations.NotNull;

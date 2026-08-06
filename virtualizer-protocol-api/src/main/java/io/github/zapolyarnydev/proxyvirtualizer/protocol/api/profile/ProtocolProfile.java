@@ -1,4 +1,4 @@
-package io.github.zapolyarnydev.proxyvirtualizer.protocol.api;
+package io.github.zapolyarnydev.proxyvirtualizer.protocol.api.profile;
 
 import java.util.Collection;
 import java.util.Objects;
@@ -36,11 +36,11 @@ public interface ProtocolProfile {
 
   default boolean supportsAll(Collection<? extends ProtocolCapability> capabilities) {
     Objects.requireNonNull(capabilities, "capabilities");
-    return capabilities().stream().allMatch(this::supports);
+    return capabilities.stream().allMatch(this::supports);
   }
 
   default boolean supportsAny(Collection<? extends ProtocolCapability> capabilities) {
     Objects.requireNonNull(capabilities, "capabilities");
-    return capabilities().stream().anyMatch(this::supports);
+    return capabilities.stream().anyMatch(this::supports);
   }
 }

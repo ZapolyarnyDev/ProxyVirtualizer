@@ -1,6 +1,6 @@
 package io.github.zapolyarnydev.proxyvirtualizer.protocol.exception;
 
-import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.ProtocolProfile;
+import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.profile.ProtocolProfile;
 import java.io.Serial;
 
 public final class OverlappingProtocolVersionRangeException extends IllegalStateException {

@@ -1,4 +1,4 @@
-package io.github.zapolyarnydev.proxyvirtualizer.protocol.api;
+package io.github.zapolyarnydev.proxyvirtualizer.protocol.api.profile;
 
 public enum ProtocolPhase {
   HANDSHAKE,

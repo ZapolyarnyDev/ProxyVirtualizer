@@ -1,7 +1,7 @@
 package io.github.zapolyarnydev.proxyvirtualizer.protocol.exception;
 
-import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.ProtocolPhase;
-import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.ProtocolProfile;
+import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.profile.ProtocolPhase;
+import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.profile.ProtocolProfile;
 import java.io.Serial;
 
 public final class UnsupportedProtocolPhaseException extends IllegalArgumentException {

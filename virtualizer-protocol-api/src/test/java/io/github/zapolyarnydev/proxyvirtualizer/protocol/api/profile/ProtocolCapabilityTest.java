@@ -1,4 +1,4 @@
-package io.github.zapolyarnydev.proxyvirtualizer.protocol.api;
+package io.github.zapolyarnydev.proxyvirtualizer.protocol.api.profile;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;

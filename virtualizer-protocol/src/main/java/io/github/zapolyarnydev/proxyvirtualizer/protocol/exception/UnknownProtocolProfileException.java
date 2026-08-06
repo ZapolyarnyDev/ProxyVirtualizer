@@ -1,6 +1,6 @@
 package io.github.zapolyarnydev.proxyvirtualizer.protocol.exception;
 
-import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.ProtocolProfileId;
+import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.profile.ProtocolProfileId;
 import java.io.Serial;
 
 public final class UnknownProtocolProfileException extends IllegalArgumentException {
