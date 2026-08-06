@@ -8,6 +8,7 @@ import java.time.Clock;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.Callable;
 import java.util.concurrent.CompletionStage;
 import org.jetbrains.annotations.NotNull;
 
@@ -15,21 +16,33 @@ public final class VirtualizerRuntime implements PlayerConnectionLifecycle, Auto
 
   private final Clock clock;
   private final RuntimeCommandExecutor executor;
+  private final RuntimeSignalDispatcher signalDispatcher;
   private final VirtualizerRuntimeState state = new VirtualizerRuntimeState();
 
   public VirtualizerRuntime() {
-    this(Clock.systemUTC(), new SingleThreadRuntimeCommandExecutor());
+    this(
+        Clock.systemUTC(),
+        new SingleThreadRuntimeCommandExecutor(),
+        RuntimeSignalDispatcher.noop());
   }
 
   public VirtualizerRuntime(@NotNull Clock clock, @NotNull RuntimeCommandExecutor executor) {
+    this(clock, executor, RuntimeSignalDispatcher.noop());
+  }
+
+  public VirtualizerRuntime(
+      @NotNull Clock clock,
+      @NotNull RuntimeCommandExecutor executor,
+      @NotNull RuntimeSignalDispatcher signalDispatcher) {
     this.clock = Objects.requireNonNull(clock, "clock");
     this.executor = Objects.requireNonNull(executor, "executor");
+    this.signalDispatcher = Objects.requireNonNull(signalDispatcher, "signalDispatcher");
   }
 
   @NotNull
   public CompletionStage<RoomSnapshot> registerRoom(@NotNull RoomId roomId) {
     Objects.requireNonNull(roomId, "roomId");
-    return executor.submit(() -> state.registerRoom(roomId));
+    return submit(() -> state.registerRoom(roomId));
   }
 
   @NotNull
@@ -48,7 +61,7 @@ public final class VirtualizerRuntime implements PlayerConnectionLifecycle, Auto
       @NotNull PlayerId playerId, @NotNull ConnectionId connectionId) {
     Objects.requireNonNull(playerId, "playerId");
     Objects.requireNonNull(connectionId, "connectionId");
-    return executor.submit(() -> state.connect(playerId, connectionId));
+    return submit(() -> state.connect(playerId, connectionId));
   }
 
   @NotNull
@@ -63,7 +76,7 @@ public final class VirtualizerRuntime implements PlayerConnectionLifecycle, Auto
       @NotNull PlayerId playerId, @NotNull RoomId roomId) {
     Objects.requireNonNull(playerId, "playerId");
     Objects.requireNonNull(roomId, "roomId");
-    return executor.submit(() -> state.openSession(playerId, roomId, clock));
+    return submit(() -> state.openSession(playerId, roomId, clock));
   }
 
   @NotNull
@@ -75,14 +88,14 @@ public final class VirtualizerRuntime implements PlayerConnectionLifecycle, Auto
   @NotNull
   public CompletionStage<Optional<SessionSnapshot>> closeSession(@NotNull PlayerId playerId) {
     Objects.requireNonNull(playerId, "playerId");
-    return executor.submit(() -> state.closeSession(playerId));
+    return submit(() -> state.closeSession(playerId));
   }
 
   @NotNull
   public CompletionStage<Optional<PlayerConnectionSnapshot>> disconnect(
       @NotNull ConnectionId connectionId) {
     Objects.requireNonNull(connectionId, "connectionId");
-    return executor.submit(() -> state.disconnect(connectionId));
+    return submit(() -> state.disconnect(connectionId));
   }
 
   @Override
@@ -99,5 +112,14 @@ public final class VirtualizerRuntime implements PlayerConnectionLifecycle, Auto
   @Override
   public void close() {
     executor.close();
+  }
+
+  private <T> CompletionStage<T> submit(Callable<RuntimeTransition<T>> command) {
+    return executor.submit(
+        () -> {
+          RuntimeTransition<T> transition = command.call();
+          transition.signals().forEach(signalDispatcher::dispatch);
+          return transition.value();
+        });
   }
 }

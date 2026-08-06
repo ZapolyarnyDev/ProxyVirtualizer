@@ -6,6 +6,11 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import io.github.zapolyarnydev.proxyvirtualizer.core.room.RoomId;
 import io.github.zapolyarnydev.proxyvirtualizer.core.runtime.exception.PlayerConnectionNotFoundException;
 import io.github.zapolyarnydev.proxyvirtualizer.core.runtime.exception.ProxyRoomAlreadyExistsException;
+import io.github.zapolyarnydev.proxyvirtualizer.core.runtime.signal.PlayerConnectedSignal;
+import io.github.zapolyarnydev.proxyvirtualizer.core.runtime.signal.PlayerDisconnectedSignal;
+import io.github.zapolyarnydev.proxyvirtualizer.core.runtime.signal.RuntimeSignal;
+import io.github.zapolyarnydev.proxyvirtualizer.core.runtime.signal.SessionClosedSignal;
+import io.github.zapolyarnydev.proxyvirtualizer.core.runtime.signal.SessionOpenedSignal;
 import io.github.zapolyarnydev.proxyvirtualizer.core.session.ConnectionId;
 import io.github.zapolyarnydev.proxyvirtualizer.core.session.PlayerId;
 import io.github.zapolyarnydev.proxyvirtualizer.core.session.SessionState;
@@ -19,6 +24,7 @@ import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
+import java.util.concurrent.Executor;
 import org.junit.jupiter.api.Test;
 
 final class VirtualizerRuntimeTest {
@@ -120,6 +126,34 @@ final class VirtualizerRuntimeTest {
         .contains(new PlayerConnectionSnapshot(playerId, secondConnectionId));
   }
 
+  @Test
+  void publishesSignalsOutsideRuntimeCommandExecutor() {
+    ManualRuntimeCommandExecutor runtimeExecutor = new ManualRuntimeCommandExecutor();
+    ManualExecutor signalExecutor = new ManualExecutor();
+    Queue<RuntimeSignal> signals = new ArrayDeque<>();
+    VirtualizerRuntime runtime =
+        new VirtualizerRuntime(
+            CLOCK, runtimeExecutor, RuntimeSignalDispatcher.async(signalExecutor, signals::add));
+    RoomId roomId = new RoomId(1);
+    PlayerId playerId = playerId();
+    ConnectionId connectionId = connectionId();
+
+    await(runtime.registerRoom(roomId), runtimeExecutor);
+    await(runtime.connect(playerId, connectionId), runtimeExecutor);
+    await(runtime.openSession(playerId, roomId), runtimeExecutor);
+    await(runtime.disconnect(connectionId), runtimeExecutor);
+
+    assertThat(signals).isEmpty();
+    signalExecutor.runAll();
+    assertThat(signals)
+        .hasExactlyElementsOfTypes(
+            io.github.zapolyarnydev.proxyvirtualizer.core.runtime.signal.RoomRegisteredSignal.class,
+            PlayerConnectedSignal.class,
+            SessionOpenedSignal.class,
+            SessionClosedSignal.class,
+            PlayerDisconnectedSignal.class);
+  }
+
   private static <T> T await(CompletionStage<T> stage, ManualRuntimeCommandExecutor executor) {
     executor.runAll();
     return await(stage);
@@ -160,6 +194,20 @@ final class VirtualizerRuntimeTest {
 
     void runAll() {
       while (!commands.isEmpty()) commands.remove().run();
+    }
+  }
+
+  private static final class ManualExecutor implements Executor {
+
+    private final Queue<Runnable> tasks = new ArrayDeque<>();
+
+    @Override
+    public void execute(Runnable command) {
+      tasks.add(command);
+    }
+
+    void runAll() {
+      while (!tasks.isEmpty()) tasks.remove().run();
     }
   }
 }
