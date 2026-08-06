@@ -1,11 +1,16 @@
 package io.github.zapolyarnydev.proxyvirtualizer.core.connection;
 
+import io.github.zapolyarnydev.proxyvirtualizer.core.session.ConnectionId;
 import io.github.zapolyarnydev.proxyvirtualizer.core.session.PlayerId;
+import java.util.concurrent.CompletionStage;
 import org.jetbrains.annotations.NotNull;
 
 public interface PlayerConnectionLifecycle {
 
-  void playerConnected(@NotNull PlayerId playerId);
+  @NotNull
+  CompletionStage<Void> playerConnected(
+      @NotNull PlayerId playerId, @NotNull ConnectionId connectionId);
 
-  void playerDisconnected(@NotNull PlayerId playerId);
+  @NotNull
+  CompletionStage<Void> playerDisconnected(@NotNull ConnectionId connectionId);
 }

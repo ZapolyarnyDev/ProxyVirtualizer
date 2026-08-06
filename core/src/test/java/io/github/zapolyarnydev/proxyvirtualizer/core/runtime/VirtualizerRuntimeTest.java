@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import io.github.zapolyarnydev.proxyvirtualizer.core.room.RoomId;
 import io.github.zapolyarnydev.proxyvirtualizer.core.runtime.exception.PlayerConnectionNotFoundException;
 import io.github.zapolyarnydev.proxyvirtualizer.core.runtime.exception.ProxyRoomAlreadyExistsException;
+import io.github.zapolyarnydev.proxyvirtualizer.core.session.ConnectionId;
 import io.github.zapolyarnydev.proxyvirtualizer.core.session.PlayerId;
 import io.github.zapolyarnydev.proxyvirtualizer.core.session.SessionState;
 import java.time.Clock;
@@ -30,7 +31,8 @@ final class VirtualizerRuntimeTest {
     VirtualizerRuntime runtime = new VirtualizerRuntime(CLOCK, executor);
     PlayerId playerId = playerId();
 
-    CompletionStage<PlayerConnectionSnapshot> connection = runtime.connect(playerId);
+    CompletionStage<PlayerConnectionSnapshot> connection =
+        runtime.connect(playerId, connectionId());
 
     assertThat(connection).isNotCompleted();
     executor.runAll();
@@ -47,7 +49,7 @@ final class VirtualizerRuntimeTest {
     PlayerId playerId = playerId();
     await(runtime.registerRoom(firstRoomId), executor);
     await(runtime.registerRoom(secondRoomId), executor);
-    await(runtime.connect(playerId), executor);
+    await(runtime.connect(playerId, connectionId()), executor);
 
     SessionSnapshot session = await(runtime.openSession(playerId, secondRoomId), executor);
 
@@ -66,10 +68,12 @@ final class VirtualizerRuntimeTest {
     RoomId roomId = new RoomId(1);
     PlayerId playerId = playerId();
     await(runtime.registerRoom(roomId), executor);
-    await(runtime.connect(playerId), executor);
+    PlayerConnectionSnapshot connection =
+        await(runtime.connect(playerId, connectionId()), executor);
     await(runtime.openSession(playerId, roomId), executor);
 
-    Optional<PlayerConnectionSnapshot> disconnected = await(runtime.disconnect(playerId), executor);
+    Optional<PlayerConnectionSnapshot> disconnected =
+        await(runtime.disconnect(connection.connectionId()), executor);
 
     assertThat(disconnected).isPresent();
     assertThat(await(runtime.findConnection(playerId), executor)).isEmpty();
@@ -97,6 +101,25 @@ final class VirtualizerRuntimeTest {
         .hasCauseInstanceOf(ProxyRoomAlreadyExistsException.class);
   }
 
+  @Test
+  void ignoresStaleDisconnectAfterPlayerReconnects() {
+    ManualRuntimeCommandExecutor executor = new ManualRuntimeCommandExecutor();
+    VirtualizerRuntime runtime = new VirtualizerRuntime(CLOCK, executor);
+    PlayerId playerId = playerId();
+    ConnectionId firstConnectionId = connectionId();
+    ConnectionId secondConnectionId = connectionId();
+    await(runtime.connect(playerId, firstConnectionId), executor);
+    await(runtime.disconnect(firstConnectionId), executor);
+    await(runtime.connect(playerId, secondConnectionId), executor);
+
+    Optional<PlayerConnectionSnapshot> disconnected =
+        await(runtime.disconnect(firstConnectionId), executor);
+
+    assertThat(disconnected).isEmpty();
+    assertThat(await(runtime.findConnection(playerId), executor))
+        .contains(new PlayerConnectionSnapshot(playerId, secondConnectionId));
+  }
+
   private static <T> T await(CompletionStage<T> stage, ManualRuntimeCommandExecutor executor) {
     executor.runAll();
     return await(stage);
@@ -108,6 +131,10 @@ final class VirtualizerRuntimeTest {
 
   private static PlayerId playerId() {
     return new PlayerId(UUID.randomUUID());
+  }
+
+  private static ConnectionId connectionId() {
+    return new ConnectionId(UUID.randomUUID());
   }
 
   private static final class ManualRuntimeCommandExecutor implements RuntimeCommandExecutor {

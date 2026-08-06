@@ -12,7 +12,7 @@ public record PlayerConnection(@NotNull PlayerId playerId, @NotNull ConnectionId
     Objects.requireNonNull(id, "id");
   }
 
-  public static PlayerConnection open(@NotNull PlayerId playerId) {
-    return new PlayerConnection(playerId, ConnectionId.random());
+  public static PlayerConnection open(@NotNull PlayerId playerId, @NotNull ConnectionId id) {
+    return new PlayerConnection(playerId, id);
   }
 }

@@ -4,9 +4,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.velocitypowered.api.proxy.Player;
 import io.github.zapolyarnydev.proxyvirtualizer.core.connection.PlayerConnectionLifecycle;
+import io.github.zapolyarnydev.proxyvirtualizer.core.session.ConnectionId;
 import io.github.zapolyarnydev.proxyvirtualizer.core.session.PlayerId;
 import java.lang.reflect.Proxy;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
 import org.junit.jupiter.api.Test;
 
 class VelocityPlayerConnectionLifecycleTest {
@@ -21,7 +24,7 @@ class VelocityPlayerConnectionLifecycleTest {
     lifecycle.playerConnected(player(playerUniqueId));
 
     assertThat(recordingLifecycle.connectedPlayerId).isEqualTo(new PlayerId(playerUniqueId));
-    assertThat(recordingLifecycle.disconnectedPlayerId).isNull();
+    assertThat(recordingLifecycle.connectedConnectionId).isNotNull();
   }
 
   @Test
@@ -31,10 +34,12 @@ class VelocityPlayerConnectionLifecycleTest {
         new VelocityPlayerConnectionLifecycle(recordingLifecycle);
     UUID playerUniqueId = UUID.randomUUID();
 
-    lifecycle.playerDisconnected(player(playerUniqueId));
+    Player player = player(playerUniqueId);
+    lifecycle.playerConnected(player);
+    lifecycle.playerDisconnected(player);
 
-    assertThat(recordingLifecycle.disconnectedPlayerId).isEqualTo(new PlayerId(playerUniqueId));
-    assertThat(recordingLifecycle.connectedPlayerId).isNull();
+    assertThat(recordingLifecycle.disconnectedConnectionId)
+        .isEqualTo(recordingLifecycle.connectedConnectionId);
   }
 
   private static Player player(UUID uniqueId) {
@@ -52,16 +57,20 @@ class VelocityPlayerConnectionLifecycleTest {
   private static final class RecordingLifecycle implements PlayerConnectionLifecycle {
 
     private PlayerId connectedPlayerId;
-    private PlayerId disconnectedPlayerId;
+    private ConnectionId connectedConnectionId;
+    private ConnectionId disconnectedConnectionId;
 
     @Override
-    public void playerConnected(PlayerId playerId) {
+    public CompletionStage<Void> playerConnected(PlayerId playerId, ConnectionId connectionId) {
       connectedPlayerId = playerId;
+      connectedConnectionId = connectionId;
+      return CompletableFuture.completedFuture(null);
     }
 
     @Override
-    public void playerDisconnected(PlayerId playerId) {
-      disconnectedPlayerId = playerId;
+    public CompletionStage<Void> playerDisconnected(ConnectionId connectionId) {
+      disconnectedConnectionId = connectionId;
+      return CompletableFuture.completedFuture(null);
     }
   }
 }

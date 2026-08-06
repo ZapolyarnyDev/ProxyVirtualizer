@@ -2,6 +2,7 @@ package io.github.zapolyarnydev.proxyvirtualizer.core.runtime;
 
 import io.github.zapolyarnydev.proxyvirtualizer.core.connection.PlayerConnectionLifecycle;
 import io.github.zapolyarnydev.proxyvirtualizer.core.room.RoomId;
+import io.github.zapolyarnydev.proxyvirtualizer.core.session.ConnectionId;
 import io.github.zapolyarnydev.proxyvirtualizer.core.session.PlayerId;
 import java.time.Clock;
 import java.util.List;
@@ -43,9 +44,11 @@ public final class VirtualizerRuntime implements PlayerConnectionLifecycle, Auto
   }
 
   @NotNull
-  public CompletionStage<PlayerConnectionSnapshot> connect(@NotNull PlayerId playerId) {
+  public CompletionStage<PlayerConnectionSnapshot> connect(
+      @NotNull PlayerId playerId, @NotNull ConnectionId connectionId) {
     Objects.requireNonNull(playerId, "playerId");
-    return executor.submit(() -> state.connect(playerId));
+    Objects.requireNonNull(connectionId, "connectionId");
+    return executor.submit(() -> state.connect(playerId, connectionId));
   }
 
   @NotNull
@@ -77,19 +80,20 @@ public final class VirtualizerRuntime implements PlayerConnectionLifecycle, Auto
 
   @NotNull
   public CompletionStage<Optional<PlayerConnectionSnapshot>> disconnect(
-      @NotNull PlayerId playerId) {
-    Objects.requireNonNull(playerId, "playerId");
-    return executor.submit(() -> state.disconnect(playerId));
+      @NotNull ConnectionId connectionId) {
+    Objects.requireNonNull(connectionId, "connectionId");
+    return executor.submit(() -> state.disconnect(connectionId));
   }
 
   @Override
-  public void playerConnected(@NotNull PlayerId playerId) {
-    connect(playerId);
+  public CompletionStage<Void> playerConnected(
+      @NotNull PlayerId playerId, @NotNull ConnectionId connectionId) {
+    return connect(playerId, connectionId).thenApply(connection -> null);
   }
 
   @Override
-  public void playerDisconnected(@NotNull PlayerId playerId) {
-    disconnect(playerId);
+  public CompletionStage<Void> playerDisconnected(@NotNull ConnectionId connectionId) {
+    return disconnect(connectionId).thenApply(connection -> null);
   }
 
   @Override

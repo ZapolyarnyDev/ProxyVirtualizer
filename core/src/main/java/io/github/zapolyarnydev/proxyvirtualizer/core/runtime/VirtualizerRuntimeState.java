@@ -4,9 +4,11 @@ import io.github.zapolyarnydev.proxyvirtualizer.core.connection.PlayerConnection
 import io.github.zapolyarnydev.proxyvirtualizer.core.room.ProxyRoom;
 import io.github.zapolyarnydev.proxyvirtualizer.core.room.RoomId;
 import io.github.zapolyarnydev.proxyvirtualizer.core.room.exception.SessionAlreadyExistsException;
+import io.github.zapolyarnydev.proxyvirtualizer.core.runtime.exception.PlayerConnectionAlreadyExistsException;
 import io.github.zapolyarnydev.proxyvirtualizer.core.runtime.exception.PlayerConnectionNotFoundException;
 import io.github.zapolyarnydev.proxyvirtualizer.core.runtime.exception.ProxyRoomAlreadyExistsException;
 import io.github.zapolyarnydev.proxyvirtualizer.core.runtime.exception.ProxyRoomNotFoundException;
+import io.github.zapolyarnydev.proxyvirtualizer.core.session.ConnectionId;
 import io.github.zapolyarnydev.proxyvirtualizer.core.session.PlayerId;
 import io.github.zapolyarnydev.proxyvirtualizer.core.session.Session;
 import java.time.Clock;
@@ -19,6 +21,7 @@ final class VirtualizerRuntimeState {
 
   private final Map<RoomId, ProxyRoom> roomsById = new LinkedHashMap<>();
   private final Map<PlayerId, PlayerConnection> connectionsByPlayer = new LinkedHashMap<>();
+  private final Map<ConnectionId, PlayerConnection> connectionsById = new LinkedHashMap<>();
   private final Map<PlayerId, RoomId> sessionRoomIdsByPlayer = new LinkedHashMap<>();
 
   RoomSnapshot registerRoom(RoomId roomId) {
@@ -37,9 +40,21 @@ final class VirtualizerRuntimeState {
     return Optional.ofNullable(roomsById.get(roomId)).map(RoomSnapshot::from);
   }
 
-  PlayerConnectionSnapshot connect(PlayerId playerId) {
-    PlayerConnection connection =
-        connectionsByPlayer.computeIfAbsent(playerId, PlayerConnection::open);
+  PlayerConnectionSnapshot connect(PlayerId playerId, ConnectionId connectionId) {
+    PlayerConnection existingConnection = connectionsByPlayer.get(playerId);
+    if (existingConnection != null) {
+      if (existingConnection.id().equals(connectionId))
+        return PlayerConnectionSnapshot.from(existingConnection);
+
+      throw new PlayerConnectionAlreadyExistsException(playerId, existingConnection.id());
+    }
+
+    if (connectionsById.containsKey(connectionId))
+      throw new PlayerConnectionAlreadyExistsException(playerId, connectionId);
+
+    PlayerConnection connection = PlayerConnection.open(playerId, connectionId);
+    connectionsByPlayer.put(playerId, connection);
+    connectionsById.put(connectionId, connection);
     return PlayerConnectionSnapshot.from(connection);
   }
 
@@ -73,10 +88,13 @@ final class VirtualizerRuntimeState {
     return requireRoom(roomId).closeSession(playerId).map(SessionSnapshot::from);
   }
 
-  Optional<PlayerConnectionSnapshot> disconnect(PlayerId playerId) {
-    closeSession(playerId);
-    return Optional.ofNullable(connectionsByPlayer.remove(playerId))
-        .map(PlayerConnectionSnapshot::from);
+  Optional<PlayerConnectionSnapshot> disconnect(ConnectionId connectionId) {
+    PlayerConnection connection = connectionsById.remove(connectionId);
+    if (connection == null) return Optional.empty();
+
+    connectionsByPlayer.remove(connection.playerId());
+    closeSession(connection.playerId());
+    return Optional.of(PlayerConnectionSnapshot.from(connection));
   }
 
   private PlayerConnection requireConnection(PlayerId playerId) {
