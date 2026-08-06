@@ -8,10 +8,26 @@ import org.jetbrains.annotations.NotNull;
 public interface ProtocolProfile {
 
   @NotNull
-  ProtocolVersion version();
+  ProtocolProfileId id();
+
+  @NotNull
+  ProtocolVersionRange versions();
+
+  @NotNull
+  Set<ProtocolPhase> phases();
 
   @NotNull
   Set<ProtocolCapability> capabilities();
+
+  default boolean supports(@NotNull ProtocolVersion version) {
+    Objects.requireNonNull(version, "version");
+    return versions().contains(version);
+  }
+
+  default boolean supports(@NotNull ProtocolPhase phase) {
+    Objects.requireNonNull(phase, "phase");
+    return phases().contains(phase);
+  }
 
   default boolean supports(@NotNull ProtocolCapability capability) {
     Objects.requireNonNull(capability, "capability");

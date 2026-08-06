@@ -17,8 +17,18 @@ final class ProtocolProfileTest {
     ProtocolProfile profile =
         new ProtocolProfile() {
           @Override
-          public @NotNull ProtocolVersion version() {
-            return new ProtocolVersion(769);
+          public @NotNull ProtocolProfileId id() {
+            return new ProtocolProfileId("minecraft-1.21");
+          }
+
+          @Override
+          public @NotNull ProtocolVersionRange versions() {
+            return ProtocolVersionRange.exact(new ProtocolVersion(769));
+          }
+
+          @Override
+          public @NotNull Set<ProtocolPhase> phases() {
+            return Set.of(ProtocolPhase.LOGIN, ProtocolPhase.PLAY);
           }
 
           @Override
@@ -29,5 +39,9 @@ final class ProtocolProfileTest {
 
     assertThat(profile.supports(VIRTUAL_SESSION)).isTrue();
     assertThat(profile.supports(KEEP_ALIVE)).isFalse();
+    assertThat(profile.supports(new ProtocolVersion(769))).isTrue();
+    assertThat(profile.supports(new ProtocolVersion(770))).isFalse();
+    assertThat(profile.supports(ProtocolPhase.LOGIN)).isTrue();
+    assertThat(profile.supports(ProtocolPhase.CONFIGURATION)).isFalse();
   }
 }

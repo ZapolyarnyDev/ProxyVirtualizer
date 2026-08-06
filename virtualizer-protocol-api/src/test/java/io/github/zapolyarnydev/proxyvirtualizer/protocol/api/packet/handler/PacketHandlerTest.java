@@ -3,8 +3,11 @@ package io.github.zapolyarnydev.proxyvirtualizer.protocol.api.packet.handler;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.ProtocolCapability;
+import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.ProtocolPhase;
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.ProtocolProfile;
+import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.ProtocolProfileId;
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.ProtocolVersion;
+import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.ProtocolVersionRange;
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.packet.context.ProtocolContext;
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.packet.model.ClientboundPacket;
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.packet.model.ServerboundPacket;
@@ -21,7 +24,9 @@ final class PacketHandlerTest {
     ProtocolContext context = new TestProtocolContext(sentPackets);
     PacketHandler<TestServerboundPacket> handler =
         (receivedContext, packet) -> {
-          assertThat(receivedContext.profile().version()).isEqualTo(new ProtocolVersion(769));
+          assertThat(receivedContext.profile().versions().contains(new ProtocolVersion(769)))
+              .isTrue();
+          assertThat(receivedContext.phase()).isEqualTo(ProtocolPhase.PLAY);
           receivedContext.send(new TestClientboundPacket());
         };
 
@@ -41,8 +46,18 @@ final class PacketHandlerTest {
     public ProtocolProfile profile() {
       return new ProtocolProfile() {
         @Override
-        public ProtocolVersion version() {
-          return new ProtocolVersion(769);
+        public ProtocolProfileId id() {
+          return new ProtocolProfileId("test");
+        }
+
+        @Override
+        public ProtocolVersionRange versions() {
+          return ProtocolVersionRange.exact(new ProtocolVersion(769));
+        }
+
+        @Override
+        public Set<ProtocolPhase> phases() {
+          return Set.of(ProtocolPhase.PLAY);
         }
 
         @Override
@@ -50,6 +65,11 @@ final class PacketHandlerTest {
           return Set.of();
         }
       };
+    }
+
+    @Override
+    public ProtocolPhase phase() {
+      return ProtocolPhase.PLAY;
     }
 
     @Override

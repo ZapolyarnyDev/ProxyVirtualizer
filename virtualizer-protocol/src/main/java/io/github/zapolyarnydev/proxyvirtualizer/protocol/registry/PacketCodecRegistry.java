@@ -1,5 +1,7 @@
 package io.github.zapolyarnydev.proxyvirtualizer.protocol.registry;
 
+import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.ProtocolPhase;
+import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.ProtocolProfileId;
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.ProtocolVersion;
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.packet.codec.PacketCodec;
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.packet.id.PacketId;
@@ -20,24 +22,31 @@ public final class PacketCodecRegistry {
     this.profiles = Objects.requireNonNull(profiles, "profiles");
   }
 
-  public <P extends ProtocolPacket> void register(ProtocolVersion version, PacketCodec<P> codec) {
-    Objects.requireNonNull(version, "version");
+  public <P extends ProtocolPacket> void register(
+      ProtocolProfileId profileId, ProtocolPhase phase, PacketCodec<P> codec) {
+    Objects.requireNonNull(profileId, "profileId");
+    Objects.requireNonNull(phase, "phase");
     Objects.requireNonNull(codec, "codec");
-    profiles.require(version);
-    CodecKey key = new CodecKey(version, codec.direction(), codec.packetId());
+    profiles.require(profileId, phase);
+    CodecKey key = new CodecKey(profileId, phase, codec.direction(), codec.packetId());
     if (codecs.putIfAbsent(key, codec) != null) {
       throw new DuplicatePacketCodecException("Packet codec is already registered: " + key);
     }
   }
 
   public Optional<PacketCodec<?>> find(
-      ProtocolVersion version, PacketDirection direction, PacketId packetId) {
+      ProtocolVersion version, ProtocolPhase phase, PacketDirection direction, PacketId packetId) {
     Objects.requireNonNull(version, "version");
+    Objects.requireNonNull(phase, "phase");
     Objects.requireNonNull(direction, "direction");
     Objects.requireNonNull(packetId, "packetId");
-    profiles.require(version);
-    return Optional.ofNullable(codecs.get(new CodecKey(version, direction, packetId)));
+    ProtocolProfileId profileId = profiles.require(version, phase).id();
+    return Optional.ofNullable(codecs.get(new CodecKey(profileId, phase, direction, packetId)));
   }
 
-  private record CodecKey(ProtocolVersion version, PacketDirection direction, PacketId packetId) {}
+  private record CodecKey(
+      ProtocolProfileId profileId,
+      ProtocolPhase phase,
+      PacketDirection direction,
+      PacketId packetId) {}
 }

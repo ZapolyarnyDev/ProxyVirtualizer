@@ -1,9 +1,14 @@
 package io.github.zapolyarnydev.proxyvirtualizer.protocol.registry;
 
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.ProtocolCapability;
+import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.ProtocolPhase;
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.ProtocolProfile;
+import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.ProtocolProfileId;
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.ProtocolVersion;
-import io.github.zapolyarnydev.proxyvirtualizer.protocol.exception.DuplicateProtocolVersionException;
+import io.github.zapolyarnydev.proxyvirtualizer.protocol.exception.DuplicateProtocolProfileException;
+import io.github.zapolyarnydev.proxyvirtualizer.protocol.exception.OverlappingProtocolVersionRangeException;
+import io.github.zapolyarnydev.proxyvirtualizer.protocol.exception.UnknownProtocolProfileException;
+import io.github.zapolyarnydev.proxyvirtualizer.protocol.exception.UnsupportedProtocolPhaseException;
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.exception.UnsupportedProtocolVersionException;
 import java.util.HashMap;
 import java.util.Map;
@@ -11,35 +16,69 @@ import java.util.Objects;
 
 public final class ProtocolProfileRegistry {
 
-  private final Map<ProtocolVersion, ProtocolProfile> profiles = new HashMap<>();
+  private final Map<ProtocolProfileId, ProtocolProfile> profilesById = new HashMap<>();
 
   ProtocolProfileRegistry() {}
 
   public void register(ProtocolProfile profile) {
     Objects.requireNonNull(profile, "profile");
-    ProtocolVersion version = profile.version();
-    if (profiles.putIfAbsent(version, profile) != null) {
-      throw new DuplicateProtocolVersionException(
-          "Protocol version is already registered: " + version);
-    }
+    if (profilesById.containsKey(profile.id()))
+      throw new DuplicateProtocolProfileException(profile.id());
+
+    profilesById.values().stream()
+        .filter(existing -> existing.versions().overlaps(profile.versions()))
+        .findFirst()
+        .ifPresent(
+            existing -> {
+              throw new OverlappingProtocolVersionRangeException(existing, profile);
+            });
+    profilesById.put(profile.id(), profile);
+  }
+
+  public ProtocolProfile require(ProtocolProfileId profileId) {
+    Objects.requireNonNull(profileId, "profileId");
+    ProtocolProfile profile = profilesById.get(profileId);
+    if (profile == null) throw new UnknownProtocolProfileException(profileId);
+
+    return profile;
+  }
+
+  public ProtocolProfile require(ProtocolProfileId profileId, ProtocolPhase phase) {
+    Objects.requireNonNull(phase, "phase");
+    ProtocolProfile profile = require(profileId);
+    requirePhase(profile, phase);
+    return profile;
   }
 
   public ProtocolProfile require(ProtocolVersion version) {
     Objects.requireNonNull(version, "version");
-    ProtocolProfile profile = profiles.get(version);
-    if (profile == null) {
-      throw new UnsupportedProtocolVersionException("Unsupported protocol version: " + version);
-    }
+    return profilesById.values().stream()
+        .filter(profile -> profile.supports(version))
+        .findFirst()
+        .orElseThrow(
+            () ->
+                new UnsupportedProtocolVersionException(
+                    "Unsupported protocol version: " + version));
+  }
+
+  public ProtocolProfile require(ProtocolVersion version, ProtocolPhase phase) {
+    Objects.requireNonNull(phase, "phase");
+    ProtocolProfile profile = require(version);
+    requirePhase(profile, phase);
     return profile;
   }
 
   public boolean supports(ProtocolVersion version) {
     Objects.requireNonNull(version, "version");
-    return profiles.containsKey(version);
+    return profilesById.values().stream().anyMatch(profile -> profile.supports(version));
   }
 
   public boolean supports(ProtocolVersion version, ProtocolCapability capability) {
     Objects.requireNonNull(capability, "capability");
     return require(version).supports(capability);
+  }
+
+  private static void requirePhase(ProtocolProfile profile, ProtocolPhase phase) {
+    if (!profile.supports(phase)) throw new UnsupportedProtocolPhaseException(profile, phase);
   }
 }
