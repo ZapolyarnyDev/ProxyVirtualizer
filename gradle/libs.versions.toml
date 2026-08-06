@@ -4,6 +4,7 @@ velocity = "3.4.0-SNAPSHOT"
 jetbrains-annotations = "26.1.0"
 junit = "6.1.0"
 assertj = "3.27.6"
+shadow = "9.6.1"
 
 [libraries]
 lombok = { module = "org.projectlombok:lombok", version.ref = "lombok" }
@@ -12,3 +13,6 @@ jetbrains-annotations = { module = "org.jetbrains:annotations", version.ref = "j
 junit-jupiter = { module = "org.junit.jupiter:junit-jupiter", version.ref = "junit" }
 junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher", version.ref = "junit" }
 assertj-core = { module = "org.assertj:assertj-core", version.ref = "assertj" }
+
+[plugins]
+shadow = { id = "com.gradleup.shadow", version.ref = "shadow" }
