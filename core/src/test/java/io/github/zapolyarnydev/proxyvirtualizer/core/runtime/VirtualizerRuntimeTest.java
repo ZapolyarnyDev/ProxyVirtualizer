@@ -3,17 +3,21 @@ package io.github.zapolyarnydev.proxyvirtualizer.core.runtime;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import io.github.zapolyarnydev.proxyvirtualizer.core.room.ProxyRoom;
 import io.github.zapolyarnydev.proxyvirtualizer.core.room.RoomId;
 import io.github.zapolyarnydev.proxyvirtualizer.core.runtime.exception.PlayerConnectionNotFoundException;
 import io.github.zapolyarnydev.proxyvirtualizer.core.runtime.exception.ProxyRoomAlreadyExistsException;
 import io.github.zapolyarnydev.proxyvirtualizer.core.session.PlayerId;
-import io.github.zapolyarnydev.proxyvirtualizer.core.session.Session;
 import io.github.zapolyarnydev.proxyvirtualizer.core.session.SessionState;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.ArrayDeque;
+import java.util.Optional;
+import java.util.Queue;
 import java.util.UUID;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
 import org.junit.jupiter.api.Test;
 
 final class VirtualizerRuntimeTest {
@@ -21,68 +25,114 @@ final class VirtualizerRuntimeTest {
   private static final Clock CLOCK = Clock.fixed(Instant.EPOCH, ZoneOffset.UTC);
 
   @Test
-  void connectingPlayerDoesNotOpenSession() {
-    VirtualizerRuntime runtime = new VirtualizerRuntime();
+  void serializesCommandsBeforeMutatingRuntimeState() {
+    ManualRuntimeCommandExecutor executor = new ManualRuntimeCommandExecutor();
+    VirtualizerRuntime runtime = new VirtualizerRuntime(CLOCK, executor);
     PlayerId playerId = playerId();
 
-    runtime.playerConnected(playerId);
+    CompletionStage<PlayerConnectionSnapshot> connection = runtime.connect(playerId);
 
-    assertThat(runtime.findConnection(playerId)).isPresent();
-    assertThat(runtime.findSession(playerId)).isEmpty();
+    assertThat(connection).isNotCompleted();
+    executor.runAll();
+    assertThat(await(connection).playerId()).isEqualTo(playerId);
+    assertThat(await(runtime.findSession(playerId), executor)).isEmpty();
   }
 
   @Test
   void opensPlayerSessionInExplicitlySelectedRoom() {
-    VirtualizerRuntime runtime = new VirtualizerRuntime();
-    ProxyRoom firstRoom = new ProxyRoom(new RoomId(1));
-    ProxyRoom secondRoom = new ProxyRoom(new RoomId(2));
+    ManualRuntimeCommandExecutor executor = new ManualRuntimeCommandExecutor();
+    VirtualizerRuntime runtime = new VirtualizerRuntime(CLOCK, executor);
+    RoomId firstRoomId = new RoomId(1);
+    RoomId secondRoomId = new RoomId(2);
     PlayerId playerId = playerId();
-    runtime.registerRoom(firstRoom);
-    runtime.registerRoom(secondRoom);
-    runtime.playerConnected(playerId);
+    await(runtime.registerRoom(firstRoomId), executor);
+    await(runtime.registerRoom(secondRoomId), executor);
+    await(runtime.connect(playerId), executor);
 
-    Session session = runtime.openSession(playerId, secondRoom.id(), CLOCK);
+    SessionSnapshot session = await(runtime.openSession(playerId, secondRoomId), executor);
 
     assertThat(session.state()).isEqualTo(SessionState.ACTIVE);
-    assertThat(firstRoom.findSession(playerId)).isEmpty();
-    assertThat(secondRoom.findSession(playerId)).contains(session);
+    assertThat(await(runtime.findSession(playerId), executor)).contains(session);
+    assertThat(await(runtime.findRoom(firstRoomId), executor).orElseThrow().sessionCount())
+        .isZero();
+    assertThat(await(runtime.findRoom(secondRoomId), executor).orElseThrow().sessionCount())
+        .isOne();
   }
 
   @Test
   void disconnectingPlayerClosesSessionInItsRoom() {
-    VirtualizerRuntime runtime = new VirtualizerRuntime();
-    ProxyRoom room = new ProxyRoom(new RoomId(1));
+    ManualRuntimeCommandExecutor executor = new ManualRuntimeCommandExecutor();
+    VirtualizerRuntime runtime = new VirtualizerRuntime(CLOCK, executor);
+    RoomId roomId = new RoomId(1);
     PlayerId playerId = playerId();
-    runtime.registerRoom(room);
-    runtime.playerConnected(playerId);
-    runtime.openSession(playerId, room.id(), CLOCK);
+    await(runtime.registerRoom(roomId), executor);
+    await(runtime.connect(playerId), executor);
+    await(runtime.openSession(playerId, roomId), executor);
 
-    runtime.playerDisconnected(playerId);
+    Optional<PlayerConnectionSnapshot> disconnected = await(runtime.disconnect(playerId), executor);
 
-    assertThat(runtime.findConnection(playerId)).isEmpty();
-    assertThat(runtime.findSession(playerId)).isEmpty();
-    assertThat(room.findSession(playerId)).isEmpty();
+    assertThat(disconnected).isPresent();
+    assertThat(await(runtime.findConnection(playerId), executor)).isEmpty();
+    assertThat(await(runtime.findSession(playerId), executor)).isEmpty();
+    assertThat(await(runtime.findRoom(roomId), executor).orElseThrow().sessionCount()).isZero();
   }
 
   @Test
   void rejectsOpeningSessionForDisconnectedPlayer() {
-    VirtualizerRuntime runtime = new VirtualizerRuntime();
-    runtime.registerRoom(new ProxyRoom(new RoomId(1)));
+    ManualRuntimeCommandExecutor executor = new ManualRuntimeCommandExecutor();
+    VirtualizerRuntime runtime = new VirtualizerRuntime(CLOCK, executor);
+    await(runtime.registerRoom(new RoomId(1)), executor);
 
-    assertThatThrownBy(() -> runtime.openSession(playerId(), new RoomId(1), CLOCK))
-        .isInstanceOf(PlayerConnectionNotFoundException.class);
+    assertThatThrownBy(() -> await(runtime.openSession(playerId(), new RoomId(1)), executor))
+        .hasCauseInstanceOf(PlayerConnectionNotFoundException.class);
   }
 
   @Test
   void rejectsDuplicateRoomRegistration() {
-    VirtualizerRuntime runtime = new VirtualizerRuntime();
-    runtime.registerRoom(new ProxyRoom(new RoomId(1)));
+    ManualRuntimeCommandExecutor executor = new ManualRuntimeCommandExecutor();
+    VirtualizerRuntime runtime = new VirtualizerRuntime(CLOCK, executor);
+    await(runtime.registerRoom(new RoomId(1)), executor);
 
-    assertThatThrownBy(() -> runtime.registerRoom(new ProxyRoom(new RoomId(1))))
-        .isInstanceOf(ProxyRoomAlreadyExistsException.class);
+    assertThatThrownBy(() -> await(runtime.registerRoom(new RoomId(1)), executor))
+        .hasCauseInstanceOf(ProxyRoomAlreadyExistsException.class);
+  }
+
+  private static <T> T await(CompletionStage<T> stage, ManualRuntimeCommandExecutor executor) {
+    executor.runAll();
+    return await(stage);
+  }
+
+  private static <T> T await(CompletionStage<T> stage) {
+    return stage.toCompletableFuture().join();
   }
 
   private static PlayerId playerId() {
     return new PlayerId(UUID.randomUUID());
+  }
+
+  private static final class ManualRuntimeCommandExecutor implements RuntimeCommandExecutor {
+
+    private final Queue<Runnable> commands = new ArrayDeque<>();
+
+    @Override
+    public <T> CompletionStage<T> submit(Callable<? extends T> command) {
+      CompletableFuture<T> result = new CompletableFuture<>();
+      commands.add(
+          () -> {
+            try {
+              result.complete(command.call());
+            } catch (Throwable throwable) {
+              result.completeExceptionally(throwable);
+            }
+          });
+      return result;
+    }
+
+    @Override
+    public void close() {}
+
+    void runAll() {
+      while (!commands.isEmpty()) commands.remove().run();
+    }
   }
 }

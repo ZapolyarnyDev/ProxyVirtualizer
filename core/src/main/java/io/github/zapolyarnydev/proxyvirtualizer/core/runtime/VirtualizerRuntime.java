@@ -1,111 +1,99 @@
 package io.github.zapolyarnydev.proxyvirtualizer.core.runtime;
 
-import io.github.zapolyarnydev.proxyvirtualizer.core.connection.PlayerConnection;
 import io.github.zapolyarnydev.proxyvirtualizer.core.connection.PlayerConnectionLifecycle;
-import io.github.zapolyarnydev.proxyvirtualizer.core.room.ProxyRoom;
 import io.github.zapolyarnydev.proxyvirtualizer.core.room.RoomId;
-import io.github.zapolyarnydev.proxyvirtualizer.core.room.exception.SessionAlreadyExistsException;
-import io.github.zapolyarnydev.proxyvirtualizer.core.runtime.exception.PlayerConnectionNotFoundException;
-import io.github.zapolyarnydev.proxyvirtualizer.core.runtime.exception.ProxyRoomAlreadyExistsException;
-import io.github.zapolyarnydev.proxyvirtualizer.core.runtime.exception.ProxyRoomNotFoundException;
 import io.github.zapolyarnydev.proxyvirtualizer.core.session.PlayerId;
-import io.github.zapolyarnydev.proxyvirtualizer.core.session.Session;
 import java.time.Clock;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.CompletionStage;
 import org.jetbrains.annotations.NotNull;
 
-public final class VirtualizerRuntime implements PlayerConnectionLifecycle {
+public final class VirtualizerRuntime implements PlayerConnectionLifecycle, AutoCloseable {
 
-  private final Map<RoomId, ProxyRoom> roomsById = new LinkedHashMap<>();
-  private final Map<PlayerId, PlayerConnection> connectionsByPlayer = new LinkedHashMap<>();
-  private final Map<PlayerId, RoomId> sessionRoomIdsByPlayer = new LinkedHashMap<>();
+  private final Clock clock;
+  private final RuntimeCommandExecutor executor;
+  private final VirtualizerRuntimeState state = new VirtualizerRuntimeState();
 
-  public void registerRoom(@NotNull ProxyRoom room) {
-    Objects.requireNonNull(room, "room");
-    if (roomsById.putIfAbsent(room.id(), room) != null)
-      throw new ProxyRoomAlreadyExistsException(room.id());
+  public VirtualizerRuntime() {
+    this(Clock.systemUTC(), new SingleThreadRuntimeCommandExecutor());
+  }
+
+  public VirtualizerRuntime(@NotNull Clock clock, @NotNull RuntimeCommandExecutor executor) {
+    this.clock = Objects.requireNonNull(clock, "clock");
+    this.executor = Objects.requireNonNull(executor, "executor");
   }
 
   @NotNull
-  public List<ProxyRoom> rooms() {
-    return List.copyOf(roomsById.values());
-  }
-
-  @NotNull
-  public Optional<ProxyRoom> findRoom(@NotNull RoomId roomId) {
+  public CompletionStage<RoomSnapshot> registerRoom(@NotNull RoomId roomId) {
     Objects.requireNonNull(roomId, "roomId");
-    return Optional.ofNullable(roomsById.get(roomId));
+    return executor.submit(() -> state.registerRoom(roomId));
   }
 
   @NotNull
-  public Optional<PlayerConnection> findConnection(@NotNull PlayerId playerId) {
+  public CompletionStage<List<RoomSnapshot>> rooms() {
+    return executor.submit(state::rooms);
+  }
+
+  @NotNull
+  public CompletionStage<Optional<RoomSnapshot>> findRoom(@NotNull RoomId roomId) {
+    Objects.requireNonNull(roomId, "roomId");
+    return executor.submit(() -> state.findRoom(roomId));
+  }
+
+  @NotNull
+  public CompletionStage<PlayerConnectionSnapshot> connect(@NotNull PlayerId playerId) {
     Objects.requireNonNull(playerId, "playerId");
-    return Optional.ofNullable(connectionsByPlayer.get(playerId));
+    return executor.submit(() -> state.connect(playerId));
   }
 
   @NotNull
-  public Session openSession(
-      @NotNull PlayerId playerId, @NotNull RoomId roomId, @NotNull Clock clock) {
+  public CompletionStage<Optional<PlayerConnectionSnapshot>> findConnection(
+      @NotNull PlayerId playerId) {
+    Objects.requireNonNull(playerId, "playerId");
+    return executor.submit(() -> state.findConnection(playerId));
+  }
+
+  @NotNull
+  public CompletionStage<SessionSnapshot> openSession(
+      @NotNull PlayerId playerId, @NotNull RoomId roomId) {
     Objects.requireNonNull(playerId, "playerId");
     Objects.requireNonNull(roomId, "roomId");
-    Objects.requireNonNull(clock, "clock");
-
-    if (sessionRoomIdsByPlayer.containsKey(playerId))
-      throw new SessionAlreadyExistsException("Player already has an open session: " + playerId);
-
-    PlayerConnection connection = requireConnection(playerId);
-    ProxyRoom room = requireRoom(roomId);
-    Session session = room.openSession(playerId, connection.id(), clock);
-    sessionRoomIdsByPlayer.put(playerId, roomId);
-    return session;
+    return executor.submit(() -> state.openSession(playerId, roomId, clock));
   }
 
   @NotNull
-  public Optional<Session> findSession(@NotNull PlayerId playerId) {
+  public CompletionStage<Optional<SessionSnapshot>> findSession(@NotNull PlayerId playerId) {
     Objects.requireNonNull(playerId, "playerId");
-    RoomId roomId = sessionRoomIdsByPlayer.get(playerId);
-    if (roomId == null) return Optional.empty();
-
-    return requireRoom(roomId).findSession(playerId);
+    return executor.submit(() -> state.findSession(playerId));
   }
 
   @NotNull
-  public Optional<Session> closeSession(@NotNull PlayerId playerId) {
+  public CompletionStage<Optional<SessionSnapshot>> closeSession(@NotNull PlayerId playerId) {
     Objects.requireNonNull(playerId, "playerId");
-    RoomId roomId = sessionRoomIdsByPlayer.remove(playerId);
-    if (roomId == null) return Optional.empty();
+    return executor.submit(() -> state.closeSession(playerId));
+  }
 
-    return requireRoom(roomId).closeSession(playerId);
+  @NotNull
+  public CompletionStage<Optional<PlayerConnectionSnapshot>> disconnect(
+      @NotNull PlayerId playerId) {
+    Objects.requireNonNull(playerId, "playerId");
+    return executor.submit(() -> state.disconnect(playerId));
   }
 
   @Override
   public void playerConnected(@NotNull PlayerId playerId) {
-    Objects.requireNonNull(playerId, "playerId");
-    connectionsByPlayer.putIfAbsent(playerId, PlayerConnection.open(playerId));
+    connect(playerId);
   }
 
   @Override
   public void playerDisconnected(@NotNull PlayerId playerId) {
-    Objects.requireNonNull(playerId, "playerId");
-    closeSession(playerId);
-    connectionsByPlayer.remove(playerId);
+    disconnect(playerId);
   }
 
-  private PlayerConnection requireConnection(PlayerId playerId) {
-    PlayerConnection connection = connectionsByPlayer.get(playerId);
-    if (connection == null) throw new PlayerConnectionNotFoundException(playerId);
-
-    return connection;
-  }
-
-  private ProxyRoom requireRoom(RoomId roomId) {
-    ProxyRoom room = roomsById.get(roomId);
-    if (room == null) throw new ProxyRoomNotFoundException(roomId);
-
-    return room;
+  @Override
+  public void close() {
+    executor.close();
   }
 }

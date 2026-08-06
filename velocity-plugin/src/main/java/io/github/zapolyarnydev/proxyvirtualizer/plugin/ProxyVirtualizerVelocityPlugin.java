@@ -38,6 +38,7 @@ public final class ProxyVirtualizerVelocityPlugin {
 
   @Subscribe
   public void onProxyShutdown(ProxyShutdownEvent event) {
+    if (runtime != null) runtime.close();
     logger.info("ProxyVirtualizer stopped");
   }
 }
