@@ -5,5 +5,13 @@ public enum TransportState {
   OPEN,
   CLOSING,
   CLOSED,
-  FAILED
+  FAILED;
+
+  public boolean isOpen() {
+    return this == OPEN;
+  }
+
+  public boolean isTerminal() {
+    return this == CLOSED || this == FAILED;
+  }
 }
