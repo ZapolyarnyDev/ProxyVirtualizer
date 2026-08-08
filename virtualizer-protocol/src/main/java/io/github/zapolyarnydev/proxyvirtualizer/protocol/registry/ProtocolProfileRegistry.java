@@ -78,6 +78,13 @@ public final class ProtocolProfileRegistry {
     return require(version).supports(capability);
   }
 
+  public boolean supports(ProtocolVersion version, ProtocolPhase phase) {
+    Objects.requireNonNull(version, "version");
+    Objects.requireNonNull(phase, "phase");
+    return profilesById.values().stream()
+        .anyMatch(profile -> profile.supports(version) && profile.supports(phase));
+  }
+
   private static void requirePhase(ProtocolProfile profile, ProtocolPhase phase) {
     if (!profile.supports(phase)) throw new UnsupportedProtocolPhaseException(profile, phase);
   }

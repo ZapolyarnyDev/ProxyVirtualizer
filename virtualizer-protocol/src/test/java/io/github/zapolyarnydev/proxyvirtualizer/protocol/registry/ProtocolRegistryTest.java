@@ -97,6 +97,14 @@ final class ProtocolRegistryTest {
   }
 
   @Test
+  void resolvesProtocolPhaseSupport() {
+    assertThat(registry.profiles().supports(COMPATIBLE_VERSION, ProtocolPhase.PLAY)).isTrue();
+    assertThat(registry.profiles().supports(VERSION, ProtocolPhase.CONFIGURATION)).isFalse();
+    assertThat(registry.profiles().supports(new ProtocolVersion(771), ProtocolPhase.PLAY))
+        .isFalse();
+  }
+
+  @Test
   void resolvesCodecByVersionDirectionAndPacketId() {
     PacketCodec<TestClientboundPacket> codec = new TestClientboundCodec();
     registry.codecs().register(PROFILE_ID, ProtocolPhase.PLAY, codec);
