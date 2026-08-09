@@ -1,10 +1,11 @@
-package io.github.zapolyarnydev.proxyvirtualizer.core.runtime;
+package io.github.zapolyarnydev.proxyvirtualizer.core.runtime.signal.dispatch;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 import io.github.zapolyarnydev.proxyvirtualizer.core.room.RoomId;
 import io.github.zapolyarnydev.proxyvirtualizer.core.runtime.signal.RoomRegisteredSignal;
 import io.github.zapolyarnydev.proxyvirtualizer.core.runtime.signal.RuntimeSignal;
+import io.github.zapolyarnydev.proxyvirtualizer.core.runtime.snapshot.RoomSnapshot;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;

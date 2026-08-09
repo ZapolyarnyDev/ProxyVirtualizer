@@ -1,4 +1,4 @@
-package io.github.zapolyarnydev.proxyvirtualizer.core.runtime;
+package io.github.zapolyarnydev.proxyvirtualizer.core.runtime.executor;
 
 import java.util.Objects;
 import java.util.concurrent.Callable;

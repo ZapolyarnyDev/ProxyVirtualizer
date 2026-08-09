@@ -13,6 +13,9 @@ import io.github.zapolyarnydev.proxyvirtualizer.core.runtime.signal.PlayerDiscon
 import io.github.zapolyarnydev.proxyvirtualizer.core.runtime.signal.RoomRegisteredSignal;
 import io.github.zapolyarnydev.proxyvirtualizer.core.runtime.signal.SessionClosedSignal;
 import io.github.zapolyarnydev.proxyvirtualizer.core.runtime.signal.SessionOpenedSignal;
+import io.github.zapolyarnydev.proxyvirtualizer.core.runtime.snapshot.PlayerConnectionSnapshot;
+import io.github.zapolyarnydev.proxyvirtualizer.core.runtime.snapshot.RoomSnapshot;
+import io.github.zapolyarnydev.proxyvirtualizer.core.runtime.snapshot.SessionSnapshot;
 import io.github.zapolyarnydev.proxyvirtualizer.core.session.ConnectionId;
 import io.github.zapolyarnydev.proxyvirtualizer.core.session.PlayerId;
 import io.github.zapolyarnydev.proxyvirtualizer.core.session.Session;

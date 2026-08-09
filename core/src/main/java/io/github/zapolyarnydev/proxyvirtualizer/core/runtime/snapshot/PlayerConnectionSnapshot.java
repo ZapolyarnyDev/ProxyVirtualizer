@@ -1,4 +1,4 @@
-package io.github.zapolyarnydev.proxyvirtualizer.core.runtime;
+package io.github.zapolyarnydev.proxyvirtualizer.core.runtime.snapshot;
 
 import io.github.zapolyarnydev.proxyvirtualizer.core.connection.PlayerConnection;
 import io.github.zapolyarnydev.proxyvirtualizer.core.session.ConnectionId;
@@ -15,7 +15,7 @@ public record PlayerConnectionSnapshot(
   }
 
   @NotNull
-  static PlayerConnectionSnapshot from(PlayerConnection connection) {
+  public static PlayerConnectionSnapshot from(PlayerConnection connection) {
     return new PlayerConnectionSnapshot(connection.playerId(), connection.id());
   }
 }

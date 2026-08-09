@@ -1,6 +1,6 @@
 package io.github.zapolyarnydev.proxyvirtualizer.core.runtime.signal;
 
-import io.github.zapolyarnydev.proxyvirtualizer.core.runtime.SessionSnapshot;
+import io.github.zapolyarnydev.proxyvirtualizer.core.runtime.snapshot.SessionSnapshot;
 import java.util.Objects;
 import org.jetbrains.annotations.NotNull;
 
