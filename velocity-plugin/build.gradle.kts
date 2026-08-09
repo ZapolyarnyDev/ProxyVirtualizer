@@ -9,6 +9,7 @@ dependencies {
     implementation(project(":virtualizer-api"))
     implementation(project(":core"))
     implementation(project(":velocity-adapter"))
+    implementation(project(":velocity-netty-bridge"))
     compileOnly(rootProject.libs.velocity.api)
     annotationProcessor(rootProject.libs.velocity.api)
     testImplementation(rootProject.libs.velocity.api)

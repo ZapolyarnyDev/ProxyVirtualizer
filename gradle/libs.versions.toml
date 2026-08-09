@@ -5,10 +5,12 @@ jetbrains-annotations = "26.1.0"
 junit = "6.1.0"
 assertj = "3.27.6"
 shadow = "9.6.1"
+netty = "4.2.15.Final"
 
 [libraries]
 lombok = { module = "org.projectlombok:lombok", version.ref = "lombok" }
 velocity-api = { module = "com.velocitypowered:velocity-api", version.ref = "velocity" }
+netty-codec = { module = "io.netty:netty-codec", version.ref = "netty" }
 jetbrains-annotations = { module = "org.jetbrains:annotations", version.ref = "jetbrains-annotations" }
 junit-jupiter = { module = "org.junit.jupiter:junit-jupiter", version.ref = "junit" }
 junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher", version.ref = "junit" }
