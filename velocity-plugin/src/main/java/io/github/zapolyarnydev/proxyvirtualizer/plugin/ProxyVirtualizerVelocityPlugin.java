@@ -7,6 +7,7 @@ import com.velocitypowered.api.event.proxy.ProxyShutdownEvent;
 import com.velocitypowered.api.plugin.Plugin;
 import com.velocitypowered.api.proxy.ProxyServer;
 import io.github.zapolyarnydev.proxyvirtualizer.core.runtime.VirtualizerRuntime;
+import io.github.zapolyarnydev.proxyvirtualizer.velocity.adapter.connection.VelocityConnectionRegistry;
 import io.github.zapolyarnydev.proxyvirtualizer.velocity.adapter.connection.VelocityPlayerConnectionLifecycle;
 import io.github.zapolyarnydev.proxyvirtualizer.velocity.adapter.connection.VelocityPlayerConnectionListener;
 import org.slf4j.Logger;
@@ -29,7 +30,8 @@ public final class ProxyVirtualizerVelocityPlugin {
   public void onProxyInitialize(ProxyInitializeEvent event) {
     runtime = new VirtualizerRuntime();
 
-    var lifecycle = new VelocityPlayerConnectionLifecycle(runtime);
+    var connections = new VelocityConnectionRegistry();
+    var lifecycle = new VelocityPlayerConnectionLifecycle(runtime, connections);
     playerConnectionListener = new VelocityPlayerConnectionListener(lifecycle);
 
     server.getEventManager().register(this, playerConnectionListener);

@@ -18,7 +18,7 @@ class VelocityPlayerConnectionLifecycleTest {
   void forwardsConnectedPlayerIdentityToCore() {
     RecordingLifecycle recordingLifecycle = new RecordingLifecycle();
     VelocityPlayerConnectionLifecycle lifecycle =
-        new VelocityPlayerConnectionLifecycle(recordingLifecycle);
+        new VelocityPlayerConnectionLifecycle(recordingLifecycle, new VelocityConnectionRegistry());
     UUID playerUniqueId = UUID.randomUUID();
 
     lifecycle.playerConnected(player(playerUniqueId));
@@ -31,7 +31,7 @@ class VelocityPlayerConnectionLifecycleTest {
   void forwardsDisconnectedPlayerIdentityToCore() {
     RecordingLifecycle recordingLifecycle = new RecordingLifecycle();
     VelocityPlayerConnectionLifecycle lifecycle =
-        new VelocityPlayerConnectionLifecycle(recordingLifecycle);
+        new VelocityPlayerConnectionLifecycle(recordingLifecycle, new VelocityConnectionRegistry());
     UUID playerUniqueId = UUID.randomUUID();
 
     Player player = player(playerUniqueId);
@@ -46,7 +46,7 @@ class VelocityPlayerConnectionLifecycleTest {
   void assignsDistinctConnectionIdentitiesToSeparateVelocityConnections() {
     RecordingLifecycle recordingLifecycle = new RecordingLifecycle();
     VelocityPlayerConnectionLifecycle lifecycle =
-        new VelocityPlayerConnectionLifecycle(recordingLifecycle);
+        new VelocityPlayerConnectionLifecycle(recordingLifecycle, new VelocityConnectionRegistry());
     UUID playerUniqueId = UUID.randomUUID();
 
     lifecycle.playerConnected(player(playerUniqueId));
