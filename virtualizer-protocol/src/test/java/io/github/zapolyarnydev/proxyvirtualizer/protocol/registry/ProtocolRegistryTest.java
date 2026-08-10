@@ -14,11 +14,10 @@ import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.profile.ProtocolPha
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.profile.ProtocolProfile;
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.profile.ProtocolProfileId;
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.profile.ProtocolVersion;
-import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.profile.ProtocolVersionRange;
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.exception.DuplicatePacketCodecException;
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.exception.DuplicatePacketHandlerException;
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.exception.DuplicateProtocolProfileException;
-import io.github.zapolyarnydev.proxyvirtualizer.protocol.exception.OverlappingProtocolVersionRangeException;
+import io.github.zapolyarnydev.proxyvirtualizer.protocol.exception.DuplicateProtocolVersionException;
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.exception.UnsupportedProtocolPhaseException;
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.exception.UnsupportedProtocolVersionException;
 import java.nio.ByteBuffer;
@@ -45,7 +44,7 @@ final class ProtocolRegistryTest {
         .register(
             new TestProtocolProfile(
                 PROFILE_ID,
-                new ProtocolVersionRange(VERSION, COMPATIBLE_VERSION),
+                Set.of(VERSION, COMPATIBLE_VERSION),
                 Set.of(ProtocolPhase.LOGIN, ProtocolPhase.PLAY),
                 Set.of(VIRTUAL_SESSION)));
   }
@@ -59,14 +58,14 @@ final class ProtocolRegistryTest {
                     .register(
                         new TestProtocolProfile(
                             PROFILE_ID,
-                            ProtocolVersionRange.exact(VERSION),
+                            Set.of(VERSION),
                             Set.of(ProtocolPhase.PLAY),
                             Set.of(VIRTUAL_SESSION))))
         .isInstanceOf(DuplicateProtocolProfileException.class);
   }
 
   @Test
-  void rejectsOverlappingProtocolVersionRanges() {
+  void rejectsProtocolVersionClaimedByAnotherProfile() {
     assertThatThrownBy(
             () ->
                 registry
@@ -74,10 +73,10 @@ final class ProtocolRegistryTest {
                     .register(
                         new TestProtocolProfile(
                             new ProtocolProfileId("minecraft-overlap"),
-                            new ProtocolVersionRange(COMPATIBLE_VERSION, new ProtocolVersion(771)),
+                            Set.of(COMPATIBLE_VERSION, new ProtocolVersion(771)),
                             Set.of(ProtocolPhase.PLAY),
                             Set.of())))
-        .isInstanceOf(OverlappingProtocolVersionRangeException.class);
+        .isInstanceOf(DuplicateProtocolVersionException.class);
   }
 
   @Test
@@ -107,7 +106,7 @@ final class ProtocolRegistryTest {
   @Test
   void resolvesCodecByVersionDirectionAndPacketId() {
     PacketCodec<TestClientboundPacket> codec = new TestClientboundCodec();
-    registry.codecs().register(PROFILE_ID, ProtocolPhase.PLAY, codec);
+    registry.codecs().registerClientbound(PROFILE_ID, ProtocolPhase.PLAY, new PacketId(42), codec);
 
     assertThat(
             registry
@@ -124,8 +123,12 @@ final class ProtocolRegistryTest {
   void resolvesSamePacketIdInDifferentPhases() {
     PacketCodec<TestClientboundPacket> loginCodec = new TestClientboundCodec();
     PacketCodec<TestClientboundPacket> playCodec = new TestClientboundCodec();
-    registry.codecs().register(PROFILE_ID, ProtocolPhase.LOGIN, loginCodec);
-    registry.codecs().register(PROFILE_ID, ProtocolPhase.PLAY, playCodec);
+    registry
+        .codecs()
+        .registerClientbound(PROFILE_ID, ProtocolPhase.LOGIN, new PacketId(42), loginCodec);
+    registry
+        .codecs()
+        .registerClientbound(PROFILE_ID, ProtocolPhase.PLAY, new PacketId(42), playCodec);
 
     assertThat(
             registry
@@ -141,13 +144,20 @@ final class ProtocolRegistryTest {
 
   @Test
   void rejectsDuplicateCodecRegistration() {
-    registry.codecs().register(PROFILE_ID, ProtocolPhase.PLAY, new TestClientboundCodec());
+    registry
+        .codecs()
+        .registerClientbound(
+            PROFILE_ID, ProtocolPhase.PLAY, new PacketId(42), new TestClientboundCodec());
 
     assertThatThrownBy(
             () ->
                 registry
                     .codecs()
-                    .register(PROFILE_ID, ProtocolPhase.PLAY, new TestClientboundCodec()))
+                    .registerClientbound(
+                        PROFILE_ID,
+                        ProtocolPhase.PLAY,
+                        new PacketId(42),
+                        new TestClientboundCodec()))
         .isInstanceOf(DuplicatePacketCodecException.class);
   }
 
@@ -157,7 +167,11 @@ final class ProtocolRegistryTest {
             () ->
                 registry
                     .codecs()
-                    .register(PROFILE_ID, ProtocolPhase.CONFIGURATION, new TestClientboundCodec()))
+                    .registerClientbound(
+                        PROFILE_ID,
+                        ProtocolPhase.CONFIGURATION,
+                        new PacketId(42),
+                        new TestClientboundCodec()))
         .isInstanceOf(UnsupportedProtocolPhaseException.class);
   }
 
@@ -196,7 +210,7 @@ final class ProtocolRegistryTest {
 
   private record TestProtocolProfile(
       ProtocolProfileId id,
-      ProtocolVersionRange versions,
+      Set<ProtocolVersion> versions,
       Set<ProtocolPhase> phases,
       Set<ProtocolCapability> capabilities)
       implements ProtocolProfile {}
@@ -206,16 +220,6 @@ final class ProtocolRegistryTest {
   private record TestServerboundPacket() implements ServerboundPacket {}
 
   private static final class TestClientboundCodec implements PacketCodec<TestClientboundPacket> {
-
-    @Override
-    public @NotNull PacketId packetId() {
-      return new PacketId(42);
-    }
-
-    @Override
-    public @NotNull PacketDirection direction() {
-      return PacketDirection.CLIENTBOUND;
-    }
 
     @Override
     public @NotNull Class<TestClientboundPacket> packetType() {

@@ -2,8 +2,10 @@ package io.github.zapolyarnydev.proxyvirtualizer.protocol.registry;
 
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.packet.codec.PacketCodec;
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.packet.id.PacketId;
+import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.packet.model.ClientboundPacket;
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.packet.model.PacketDirection;
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.packet.model.ProtocolPacket;
+import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.packet.model.ServerboundPacket;
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.profile.ProtocolPhase;
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.profile.ProtocolProfileId;
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.profile.ProtocolVersion;
@@ -22,13 +24,29 @@ public final class PacketCodecRegistry {
     this.profiles = Objects.requireNonNull(profiles, "profiles");
   }
 
-  public <P extends ProtocolPacket> void register(
-      ProtocolProfileId profileId, ProtocolPhase phase, PacketCodec<P> codec) {
+  public <P extends ServerboundPacket> void registerServerbound(
+      ProtocolProfileId profileId, ProtocolPhase phase, PacketId packetId, PacketCodec<P> codec) {
+    register(profileId, phase, PacketDirection.SERVERBOUND, packetId, codec);
+  }
+
+  public <P extends ClientboundPacket> void registerClientbound(
+      ProtocolProfileId profileId, ProtocolPhase phase, PacketId packetId, PacketCodec<P> codec) {
+    register(profileId, phase, PacketDirection.CLIENTBOUND, packetId, codec);
+  }
+
+  private <P extends ProtocolPacket> void register(
+      ProtocolProfileId profileId,
+      ProtocolPhase phase,
+      PacketDirection direction,
+      PacketId packetId,
+      PacketCodec<P> codec) {
     Objects.requireNonNull(profileId, "profileId");
     Objects.requireNonNull(phase, "phase");
+    Objects.requireNonNull(direction, "direction");
+    Objects.requireNonNull(packetId, "packetId");
     Objects.requireNonNull(codec, "codec");
     profiles.require(profileId, phase);
-    CodecKey key = new CodecKey(profileId, phase, codec.direction(), codec.packetId());
+    CodecKey key = new CodecKey(profileId, phase, direction, packetId);
     if (codecs.putIfAbsent(key, codec) != null) {
       throw new DuplicatePacketCodecException("Packet codec is already registered: " + key);
     }

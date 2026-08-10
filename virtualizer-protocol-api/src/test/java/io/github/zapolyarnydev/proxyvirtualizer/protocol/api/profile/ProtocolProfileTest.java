@@ -22,8 +22,8 @@ final class ProtocolProfileTest {
           }
 
           @Override
-          public @NotNull ProtocolVersionRange versions() {
-            return ProtocolVersionRange.exact(new ProtocolVersion(769));
+          public @NotNull Set<ProtocolVersion> versions() {
+            return Set.of(new ProtocolVersion(769));
           }
 
           @Override

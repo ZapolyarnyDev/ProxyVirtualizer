@@ -6,7 +6,7 @@ import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.profile.ProtocolPro
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.profile.ProtocolProfileId;
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.profile.ProtocolVersion;
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.exception.DuplicateProtocolProfileException;
-import io.github.zapolyarnydev.proxyvirtualizer.protocol.exception.OverlappingProtocolVersionRangeException;
+import io.github.zapolyarnydev.proxyvirtualizer.protocol.exception.DuplicateProtocolVersionException;
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.exception.UnknownProtocolProfileException;
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.exception.UnsupportedProtocolPhaseException;
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.exception.UnsupportedProtocolVersionException;
@@ -26,11 +26,11 @@ public final class ProtocolProfileRegistry {
       throw new DuplicateProtocolProfileException(profile.id());
 
     profilesById.values().stream()
-        .filter(existing -> existing.versions().overlaps(profile.versions()))
+        .filter(existing -> existing.versions().stream().anyMatch(profile.versions()::contains))
         .findFirst()
         .ifPresent(
             existing -> {
-              throw new OverlappingProtocolVersionRangeException(existing, profile);
+              throw new DuplicateProtocolVersionException(existing, profile);
             });
     profilesById.put(profile.id(), profile);
   }

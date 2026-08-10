@@ -10,7 +10,6 @@ import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.profile.ProtocolPha
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.profile.ProtocolProfile;
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.profile.ProtocolProfileId;
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.profile.ProtocolVersion;
-import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.profile.ProtocolVersionRange;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -51,8 +50,8 @@ final class PacketHandlerTest {
         }
 
         @Override
-        public ProtocolVersionRange versions() {
-          return ProtocolVersionRange.exact(new ProtocolVersion(769));
+        public Set<ProtocolVersion> versions() {
+          return Set.of(new ProtocolVersion(769));
         }
 
         @Override

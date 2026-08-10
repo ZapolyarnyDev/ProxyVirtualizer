@@ -11,7 +11,7 @@ public interface ProtocolProfile {
   ProtocolProfileId id();
 
   @NotNull
-  ProtocolVersionRange versions();
+  Set<ProtocolVersion> versions();
 
   @NotNull
   Set<ProtocolPhase> phases();
