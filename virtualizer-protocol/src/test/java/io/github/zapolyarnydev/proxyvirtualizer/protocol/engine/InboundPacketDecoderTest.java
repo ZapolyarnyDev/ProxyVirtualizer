@@ -3,13 +3,13 @@ package io.github.zapolyarnydev.proxyvirtualizer.protocol.engine;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.packet.id.PacketId;
+import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.packet.PacketId;
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.profile.ProtocolPhase;
-import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.transport.frame.InboundFrame;
-import io.github.zapolyarnydev.proxyvirtualizer.protocol.exception.MalformedPacketException;
-import io.github.zapolyarnydev.proxyvirtualizer.protocol.exception.UnknownPacketCodecException;
+import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.transport.InboundFrame;
+import io.github.zapolyarnydev.proxyvirtualizer.protocol.engine.exception.MalformedPacketException;
+import io.github.zapolyarnydev.proxyvirtualizer.protocol.engine.exception.UnknownPacketCodecException;
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.minecraft.Minecraft26_2Protocol;
-import io.github.zapolyarnydev.proxyvirtualizer.protocol.minecraft.packet.ServerboundKeepAlivePacket;
+import io.github.zapolyarnydev.proxyvirtualizer.protocol.minecraft.ServerboundKeepAlivePacket;
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.registry.ProtocolRegistry;
 import java.nio.ByteBuffer;
 import org.junit.jupiter.api.BeforeEach;

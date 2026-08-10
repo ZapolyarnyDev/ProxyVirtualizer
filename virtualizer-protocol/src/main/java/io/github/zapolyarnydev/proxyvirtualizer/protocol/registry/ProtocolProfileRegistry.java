@@ -5,11 +5,11 @@ import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.profile.ProtocolPha
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.profile.ProtocolProfile;
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.profile.ProtocolProfileId;
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.profile.ProtocolVersion;
-import io.github.zapolyarnydev.proxyvirtualizer.protocol.exception.DuplicateProtocolProfileException;
-import io.github.zapolyarnydev.proxyvirtualizer.protocol.exception.DuplicateProtocolVersionException;
-import io.github.zapolyarnydev.proxyvirtualizer.protocol.exception.UnknownProtocolProfileException;
-import io.github.zapolyarnydev.proxyvirtualizer.protocol.exception.UnsupportedProtocolPhaseException;
-import io.github.zapolyarnydev.proxyvirtualizer.protocol.exception.UnsupportedProtocolVersionException;
+import io.github.zapolyarnydev.proxyvirtualizer.protocol.registry.exception.DuplicateProtocolProfileException;
+import io.github.zapolyarnydev.proxyvirtualizer.protocol.registry.exception.DuplicateProtocolVersionException;
+import io.github.zapolyarnydev.proxyvirtualizer.protocol.registry.exception.UnknownProtocolProfileException;
+import io.github.zapolyarnydev.proxyvirtualizer.protocol.registry.exception.UnsupportedProtocolPhaseException;
+import io.github.zapolyarnydev.proxyvirtualizer.protocol.registry.exception.UnsupportedProtocolVersionException;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;

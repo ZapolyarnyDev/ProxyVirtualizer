@@ -1,9 +1,5 @@
 package io.github.zapolyarnydev.proxyvirtualizer.protocol.api.transport;
 
-import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.transport.frame.OutboundFrame;
-import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.transport.lifecycle.TransportCloseReason;
-import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.transport.lifecycle.TransportListener;
-import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.transport.lifecycle.TransportState;
 import java.util.concurrent.CompletionStage;
 import org.jetbrains.annotations.NotNull;
 

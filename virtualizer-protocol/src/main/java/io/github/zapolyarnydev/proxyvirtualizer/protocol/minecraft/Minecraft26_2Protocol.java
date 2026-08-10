@@ -1,12 +1,11 @@
 package io.github.zapolyarnydev.proxyvirtualizer.protocol.minecraft;
 
-import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.packet.id.PacketId;
+import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.packet.PacketId;
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.profile.ProtocolCapability;
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.profile.ProtocolPhase;
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.profile.ProtocolProfile;
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.profile.ProtocolProfileId;
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.profile.ProtocolVersion;
-import io.github.zapolyarnydev.proxyvirtualizer.protocol.minecraft.codec.ServerboundKeepAliveCodec;
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.registry.ProtocolRegistry;
 import java.util.Objects;
 import java.util.Set;

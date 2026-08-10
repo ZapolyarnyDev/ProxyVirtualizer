@@ -1,8 +1,8 @@
 package io.github.zapolyarnydev.proxyvirtualizer.velocity.netty.frame;
 
-import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.packet.id.PacketId;
-import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.transport.frame.InboundFrame;
-import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.transport.frame.OutboundFrame;
+import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.packet.PacketId;
+import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.transport.InboundFrame;
+import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.transport.OutboundFrame;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import java.nio.ByteBuffer;

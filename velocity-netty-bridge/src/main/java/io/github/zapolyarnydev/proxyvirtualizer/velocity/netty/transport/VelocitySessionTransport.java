@@ -1,12 +1,12 @@
 package io.github.zapolyarnydev.proxyvirtualizer.velocity.netty.transport;
 
 import com.velocitypowered.api.proxy.Player;
+import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.transport.InboundFrame;
+import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.transport.OutboundFrame;
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.transport.SessionTransport;
-import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.transport.frame.InboundFrame;
-import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.transport.frame.OutboundFrame;
-import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.transport.lifecycle.TransportCloseReason;
-import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.transport.lifecycle.TransportListener;
-import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.transport.lifecycle.TransportState;
+import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.transport.TransportCloseReason;
+import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.transport.TransportListener;
+import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.transport.TransportState;
 import io.github.zapolyarnydev.proxyvirtualizer.velocity.netty.frame.VelocityFrameCodec;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.Channel;

@@ -1,14 +1,14 @@
 package io.github.zapolyarnydev.proxyvirtualizer.protocol.engine;
 
-import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.packet.codec.PacketCodec;
-import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.packet.model.PacketDirection;
-import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.packet.model.ProtocolPacket;
-import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.packet.model.ServerboundPacket;
+import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.packet.PacketCodec;
+import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.packet.PacketDirection;
+import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.packet.ProtocolPacket;
+import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.packet.ServerboundPacket;
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.profile.ProtocolPhase;
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.profile.ProtocolVersion;
-import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.transport.frame.InboundFrame;
-import io.github.zapolyarnydev.proxyvirtualizer.protocol.exception.MalformedPacketException;
-import io.github.zapolyarnydev.proxyvirtualizer.protocol.exception.UnknownPacketCodecException;
+import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.transport.InboundFrame;
+import io.github.zapolyarnydev.proxyvirtualizer.protocol.engine.exception.MalformedPacketException;
+import io.github.zapolyarnydev.proxyvirtualizer.protocol.engine.exception.UnknownPacketCodecException;
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.registry.ProtocolRegistry;
 import java.nio.ByteBuffer;
 import java.util.Objects;

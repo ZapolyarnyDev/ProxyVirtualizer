@@ -2,7 +2,7 @@ package io.github.zapolyarnydev.proxyvirtualizer.protocol.minecraft;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.packet.model.PacketDirection;
+import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.packet.PacketDirection;
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.profile.ProtocolPhase;
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.registry.ProtocolRegistry;
 import org.junit.jupiter.api.Test;

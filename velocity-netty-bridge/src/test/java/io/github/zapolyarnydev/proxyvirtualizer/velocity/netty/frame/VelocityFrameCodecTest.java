@@ -3,8 +3,8 @@ package io.github.zapolyarnydev.proxyvirtualizer.velocity.netty.frame;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
 
-import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.packet.id.PacketId;
-import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.transport.frame.OutboundFrame;
+import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.packet.PacketId;
+import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.transport.OutboundFrame;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.buffer.UnpooledByteBufAllocator;

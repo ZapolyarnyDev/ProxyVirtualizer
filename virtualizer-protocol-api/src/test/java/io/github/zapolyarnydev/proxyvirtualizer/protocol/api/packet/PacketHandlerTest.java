@@ -1,10 +1,7 @@
-package io.github.zapolyarnydev.proxyvirtualizer.protocol.api.action;
+package io.github.zapolyarnydev.proxyvirtualizer.protocol.api.packet;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.packet.ClientboundPacket;
-import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.packet.ProtocolContext;
-import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.packet.ServerboundPacket;
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.profile.ProtocolCapability;
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.profile.ProtocolPhase;
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.profile.ProtocolProfile;
@@ -15,29 +12,31 @@ import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 
-final class PacketActionMapperTest {
+final class PacketHandlerTest {
 
   @Test
-  void canPublishMultipleSemanticActions() {
-    PacketActionMapper<TestPacket> mapper =
-        (context, packet, actions) -> {
-          actions.accept(new FirstAction());
-          actions.accept(new SecondAction());
+  void receivesContextAndCanSendClientboundPacket() {
+    List<ClientboundPacket> sentPackets = new ArrayList<>();
+    ProtocolContext context = new TestProtocolContext(sentPackets);
+    PacketHandler<TestServerboundPacket> handler =
+        (receivedContext, packet) -> {
+          assertThat(receivedContext.profile().versions().contains(new ProtocolVersion(769)))
+              .isTrue();
+          assertThat(receivedContext.phase()).isEqualTo(ProtocolPhase.PLAY);
+          receivedContext.send(new TestClientboundPacket());
         };
-    List<SemanticAction> actions = new ArrayList<>();
 
-    mapper.map(new TestProtocolContext(), new TestPacket(), actions::add);
+    handler.handle(context, new TestServerboundPacket());
 
-    assertThat(actions).containsExactly(new FirstAction(), new SecondAction());
+    assertThat(sentPackets).containsExactly(new TestClientboundPacket());
   }
 
-  private record TestPacket() implements ServerboundPacket {}
+  private record TestServerboundPacket() implements ServerboundPacket {}
 
-  private record FirstAction() implements SemanticAction {}
+  private record TestClientboundPacket() implements ClientboundPacket {}
 
-  private record SecondAction() implements SemanticAction {}
-
-  private static final class TestProtocolContext implements ProtocolContext {
+  private record TestProtocolContext(List<ClientboundPacket> sentPackets)
+      implements ProtocolContext {
 
     @Override
     public ProtocolProfile profile() {
@@ -70,6 +69,8 @@ final class PacketActionMapperTest {
     }
 
     @Override
-    public void send(ClientboundPacket packet) {}
+    public void send(ClientboundPacket packet) {
+      sentPackets.add(packet);
+    }
   }
 }

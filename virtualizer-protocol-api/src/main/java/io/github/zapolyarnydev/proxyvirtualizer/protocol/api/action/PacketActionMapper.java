@@ -1,7 +1,7 @@
 package io.github.zapolyarnydev.proxyvirtualizer.protocol.api.action;
 
-import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.packet.context.ProtocolContext;
-import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.packet.model.ServerboundPacket;
+import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.packet.ProtocolContext;
+import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.packet.ServerboundPacket;
 import org.jetbrains.annotations.NotNull;
 
 @FunctionalInterface

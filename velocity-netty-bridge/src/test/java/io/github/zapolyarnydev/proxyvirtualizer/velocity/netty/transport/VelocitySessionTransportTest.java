@@ -3,12 +3,12 @@ package io.github.zapolyarnydev.proxyvirtualizer.velocity.netty.transport;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.packet.id.PacketId;
-import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.transport.frame.InboundFrame;
-import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.transport.frame.OutboundFrame;
-import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.transport.lifecycle.TransportCloseReason;
-import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.transport.lifecycle.TransportListener;
-import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.transport.lifecycle.TransportState;
+import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.packet.PacketId;
+import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.transport.InboundFrame;
+import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.transport.OutboundFrame;
+import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.transport.TransportCloseReason;
+import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.transport.TransportListener;
+import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.transport.TransportState;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelDuplexHandler;
