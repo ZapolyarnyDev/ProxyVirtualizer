@@ -1,6 +1,7 @@
 package io.github.zapolyarnydev.proxyvirtualizer.velocity.netty.transport;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.packet.id.PacketId;
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.transport.frame.InboundFrame;
@@ -10,6 +11,7 @@ import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.transport.lifecycle
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.transport.lifecycle.TransportState;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
+import io.netty.channel.ChannelDuplexHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.channel.ChannelOutboundHandlerAdapter;
@@ -27,7 +29,7 @@ final class VelocitySessionTransportTest {
     RecordingOutboundHandler compressionEncoder = new RecordingOutboundHandler();
     channel.pipeline().addLast("compression-encoder", compressionEncoder);
     RecordingListener listener = new RecordingListener();
-    VelocitySessionTransport transport = VelocitySessionTransport.create(channel);
+    VelocitySessionTransport transport = VelocitySessionTransport.createForChannel(channel);
 
     transport.start(listener);
     channel.runPendingTasks();
@@ -53,8 +55,31 @@ final class VelocitySessionTransportTest {
     assertThat(outbound.readByte()).isEqualTo((byte) 4);
     outbound.release();
 
-    transport.close(TransportCloseReason.REQUESTED).toCompletableFuture().join();
+    var closing = transport.close(TransportCloseReason.REQUESTED);
+    channel.runPendingTasks();
+    closing.toCompletableFuture().join();
 
+    assertThat(listener.closeReason).isEqualTo(TransportCloseReason.REQUESTED);
+    assertThat(transport.state()).isEqualTo(TransportState.CLOSED);
+    assertThat(channel.isActive()).isTrue();
+    assertThat(channel.pipeline().context("proxyvirtualizer-session-bridge")).isNull();
+  }
+
+  @Test
+  void closeBeforeInstallDoesNotClosePlayerChannel() {
+    EmbeddedChannel channel = new EmbeddedChannel();
+    channel.pipeline().addLast("minecraft-decoder", new ChannelInboundHandlerAdapter());
+    RecordingListener listener = new RecordingListener();
+    VelocitySessionTransport transport = VelocitySessionTransport.createForChannel(channel);
+
+    transport.start(listener);
+    var closing = transport.close(TransportCloseReason.REQUESTED);
+    channel.runPendingTasks();
+    closing.toCompletableFuture().join();
+
+    assertThat(channel.isActive()).isTrue();
+    assertThat(transport.state()).isEqualTo(TransportState.CLOSED);
+    assertThat(listener.opened).isFalse();
     assertThat(listener.closeReason).isEqualTo(TransportCloseReason.REQUESTED);
   }
 
@@ -64,7 +89,7 @@ final class VelocitySessionTransportTest {
     channel.pipeline().addLast("minecraft-decoder", new ChannelInboundHandlerAdapter());
     RecordingListener listener = new RecordingListener();
     listener.openFailure = new IllegalStateException("boom");
-    VelocitySessionTransport transport = VelocitySessionTransport.create(channel);
+    VelocitySessionTransport transport = VelocitySessionTransport.createForChannel(channel);
 
     transport.start(listener);
     channel.runPendingTasks();
@@ -73,6 +98,25 @@ final class VelocitySessionTransportTest {
     assertThat(channel.isActive()).isFalse();
     assertThat(listener.failure).isSameAs(listener.openFailure);
     assertThat(listener.closeReason).isNull();
+  }
+
+  @Test
+  void failsPendingCloseWhenTransportFails() throws Exception {
+    EmbeddedChannel channel = new EmbeddedChannel();
+    channel.pipeline().addLast("minecraft-decoder", new ChannelInboundHandlerAdapter());
+    RecordingListener listener = new RecordingListener();
+    VelocitySessionTransport transport = VelocitySessionTransport.createForChannel(channel);
+    transport.start(listener);
+    channel.runPendingTasks();
+    RuntimeException failure = new IllegalStateException("transport failed while closing");
+
+    var closing = transport.close(TransportCloseReason.REQUESTED);
+    ChannelHandlerContext bridge = channel.pipeline().context("proxyvirtualizer-session-bridge");
+    ((ChannelDuplexHandler) bridge.handler()).exceptionCaught(bridge, failure);
+
+    assertThatThrownBy(() -> closing.toCompletableFuture().join()).hasCause(failure);
+    assertThat(listener.failure).isSameAs(failure);
+    assertThat(transport.state()).isEqualTo(TransportState.FAILED);
   }
 
   private static final class RecordingListener implements TransportListener {

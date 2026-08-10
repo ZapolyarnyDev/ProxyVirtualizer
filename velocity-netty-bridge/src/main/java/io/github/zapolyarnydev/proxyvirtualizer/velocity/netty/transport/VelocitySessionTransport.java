@@ -29,6 +29,7 @@ public final class VelocitySessionTransport implements SessionTransport {
   private volatile TransportListener listener;
   private volatile ChannelHandlerContext context;
   private volatile TransportCloseReason closeReason = TransportCloseReason.REMOTE_CLOSED;
+  private final CompletableFuture<Void> closeCompletion = new CompletableFuture<>();
 
   private VelocitySessionTransport(Channel channel) {
     this.channel = Objects.requireNonNull(channel, "channel");
@@ -40,7 +41,7 @@ public final class VelocitySessionTransport implements SessionTransport {
     return new VelocitySessionTransport(VelocityChannelAccess.channel(player));
   }
 
-  static VelocitySessionTransport create(Channel channel) {
+  static VelocitySessionTransport createForChannel(Channel channel) {
     return new VelocitySessionTransport(channel);
   }
 
@@ -76,20 +77,24 @@ public final class VelocitySessionTransport implements SessionTransport {
   }
 
   @Override
-  public @NotNull CompletionStage<Void> close(@NotNull TransportCloseReason reason) {
+  public synchronized @NotNull CompletionStage<Void> close(@NotNull TransportCloseReason reason) {
     Objects.requireNonNull(reason, "reason");
     if (state.isTerminal()) return CompletableFuture.completedFuture(null);
+    if (state == TransportState.CLOSING) return closeCompletion;
 
     closeReason = reason;
     state = TransportState.CLOSING;
-    ChannelFuture future = channel.close();
-    if (context == null) future.addListener(ignored -> closeFromChannel());
-    return completionStage(future);
+    try {
+      channel.eventLoop().execute(this::uninstall);
+    } catch (Throwable exception) {
+      failClose(exception);
+    }
+    return closeCompletion;
   }
 
   private void install() {
     if (state != TransportState.NEW) {
-      if (state == TransportState.CLOSING) channel.close();
+      if (state == TransportState.CLOSING) uninstall();
       return;
     }
     if (!channel.isActive()) {
@@ -104,6 +109,17 @@ public final class VelocitySessionTransport implements SessionTransport {
       notifyOpened();
     } catch (Throwable exception) {
       fail(exception);
+    }
+  }
+
+  private void uninstall() {
+    try {
+      if (channel.pipeline().context(handler) != null) channel.pipeline().remove(handler);
+      context = null;
+      closeFromChannel();
+      closeCompletion.complete(null);
+    } catch (Throwable exception) {
+      failClose(exception);
     }
   }
 
@@ -122,6 +138,7 @@ public final class VelocitySessionTransport implements SessionTransport {
     if (state.isTerminal()) return;
 
     state = TransportState.CLOSED;
+    closeCompletion.complete(null);
     TransportListener activeListener = listener;
     if (activeListener == null) return;
 
@@ -131,11 +148,23 @@ public final class VelocitySessionTransport implements SessionTransport {
     }
   }
 
+  private void failClose(Throwable exception) {
+    state = TransportState.FAILED;
+    closeCompletion.completeExceptionally(exception);
+    notifyFailure(exception);
+  }
+
   private void fail(Throwable exception) {
     if (state.isTerminal()) return;
 
     state = TransportState.FAILED;
     closeReason = TransportCloseReason.TRANSPORT_FAILURE;
+    closeCompletion.completeExceptionally(exception);
+    notifyFailure(exception);
+    channel.close();
+  }
+
+  private void notifyFailure(Throwable exception) {
     TransportListener activeListener = listener;
     if (activeListener != null) {
       try {
@@ -143,7 +172,6 @@ public final class VelocitySessionTransport implements SessionTransport {
       } catch (Throwable ignored) {
       }
     }
-    channel.close();
   }
 
   private void notifyOpened() {

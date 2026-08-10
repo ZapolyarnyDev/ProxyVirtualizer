@@ -32,6 +32,10 @@ public final class VirtualizerRuntime implements PlayerConnectionLifecycle, Auto
         RuntimeSignalDispatcher.noop());
   }
 
+  public VirtualizerRuntime(@NotNull RuntimeSignalDispatcher signalDispatcher) {
+    this(Clock.systemUTC(), new SingleThreadRuntimeCommandExecutor(), signalDispatcher);
+  }
+
   public VirtualizerRuntime(@NotNull Clock clock, @NotNull RuntimeCommandExecutor executor) {
     this(clock, executor, RuntimeSignalDispatcher.noop());
   }

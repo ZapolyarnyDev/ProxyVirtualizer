@@ -56,6 +56,96 @@ class VelocityPlayerConnectionLifecycleTest {
     assertThat(recordingLifecycle.connectedConnectionId).isNotEqualTo(firstConnectionId);
   }
 
+  @Test
+  void rollsBackAdapterRegistrationWhenCoreConnectFails() {
+    RecordingLifecycle recordingLifecycle = new RecordingLifecycle();
+    recordingLifecycle.connectResult =
+        CompletableFuture.failedFuture(new IllegalStateException("connect failed"));
+    VelocityConnectionRegistry registry = new VelocityConnectionRegistry();
+    VelocityPlayerConnectionLifecycle lifecycle =
+        new VelocityPlayerConnectionLifecycle(recordingLifecycle, registry);
+    Player player = player(UUID.randomUUID());
+
+    lifecycle.playerConnected(player).handle((ignored, cause) -> null).toCompletableFuture().join();
+
+    assertThat(registry.findConnection(player)).isEmpty();
+  }
+
+  @Test
+  void failedRepeatedConnectPreservesExistingRegistration() {
+    RecordingLifecycle recordingLifecycle = new RecordingLifecycle();
+    VelocityConnectionRegistry registry = new VelocityConnectionRegistry();
+    Player player = player(UUID.randomUUID());
+    VelocityConnection existing = registry.register(player).connection();
+    recordingLifecycle.connectResult =
+        CompletableFuture.failedFuture(new IllegalStateException("connect failed"));
+    VelocityPlayerConnectionLifecycle lifecycle =
+        new VelocityPlayerConnectionLifecycle(recordingLifecycle, registry);
+
+    lifecycle.playerConnected(player).handle((ignored, cause) -> null).toCompletableFuture().join();
+
+    assertThat(registry.findConnection(player)).contains(existing);
+  }
+
+  @Test
+  void unregistersAdapterConnectionOnlyAfterCoreDisconnectSucceeds() {
+    RecordingLifecycle recordingLifecycle = new RecordingLifecycle();
+    CompletableFuture<Void> disconnectResult = new CompletableFuture<>();
+    recordingLifecycle.disconnectResult = disconnectResult;
+    VelocityConnectionRegistry registry = new VelocityConnectionRegistry();
+    VelocityPlayerConnectionLifecycle lifecycle =
+        new VelocityPlayerConnectionLifecycle(recordingLifecycle, registry);
+    Player player = player(UUID.randomUUID());
+    lifecycle.playerConnected(player);
+
+    CompletionStage<Void> disconnecting = lifecycle.playerDisconnected(player);
+    assertThat(registry.findConnection(player)).isPresent();
+
+    disconnectResult.complete(null);
+    disconnecting.toCompletableFuture().join();
+    assertThat(registry.findConnection(player)).isEmpty();
+  }
+
+  @Test
+  void preservesAdapterConnectionWhenCoreDisconnectFails() {
+    RecordingLifecycle recordingLifecycle = new RecordingLifecycle();
+    recordingLifecycle.disconnectResult =
+        CompletableFuture.failedFuture(new IllegalStateException("disconnect failed"));
+    VelocityConnectionRegistry registry = new VelocityConnectionRegistry();
+    VelocityPlayerConnectionLifecycle lifecycle =
+        new VelocityPlayerConnectionLifecycle(recordingLifecycle, registry);
+    Player player = player(UUID.randomUUID());
+    lifecycle.playerConnected(player);
+
+    lifecycle
+        .playerDisconnected(player)
+        .handle((ignored, cause) -> null)
+        .toCompletableFuture()
+        .join();
+
+    assertThat(registry.findConnection(player)).isPresent();
+  }
+
+  @Test
+  void staleDisconnectCannotRemoveReplacementRegistration() {
+    RecordingLifecycle recordingLifecycle = new RecordingLifecycle();
+    CompletableFuture<Void> disconnectResult = new CompletableFuture<>();
+    recordingLifecycle.disconnectResult = disconnectResult;
+    VelocityConnectionRegistry registry = new VelocityConnectionRegistry();
+    VelocityPlayerConnectionLifecycle lifecycle =
+        new VelocityPlayerConnectionLifecycle(recordingLifecycle, registry);
+    Player player = player(UUID.randomUUID());
+    lifecycle.playerConnected(player);
+    CompletionStage<Void> disconnecting = lifecycle.playerDisconnected(player);
+    registry.unregister(player);
+    VelocityConnection replacement = registry.register(player).connection();
+
+    disconnectResult.complete(null);
+    disconnecting.toCompletableFuture().join();
+
+    assertThat(registry.findConnection(player)).contains(replacement);
+  }
+
   private static Player player(UUID uniqueId) {
     return (Player)
         Proxy.newProxyInstance(
@@ -73,18 +163,20 @@ class VelocityPlayerConnectionLifecycleTest {
     private PlayerId connectedPlayerId;
     private ConnectionId connectedConnectionId;
     private ConnectionId disconnectedConnectionId;
+    private CompletionStage<Void> connectResult = CompletableFuture.completedFuture(null);
+    private CompletionStage<Void> disconnectResult = CompletableFuture.completedFuture(null);
 
     @Override
     public CompletionStage<Void> playerConnected(PlayerId playerId, ConnectionId connectionId) {
       connectedPlayerId = playerId;
       connectedConnectionId = connectionId;
-      return CompletableFuture.completedFuture(null);
+      return connectResult;
     }
 
     @Override
     public CompletionStage<Void> playerDisconnected(ConnectionId connectionId) {
       disconnectedConnectionId = connectionId;
-      return CompletableFuture.completedFuture(null);
+      return disconnectResult;
     }
   }
 }

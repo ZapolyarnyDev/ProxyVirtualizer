@@ -21,15 +21,34 @@ public final class VelocityPlayerConnectionLifecycle {
 
   @NotNull
   public CompletionStage<Void> playerConnected(@NotNull Player player) {
-    VelocityConnection connection = connections.register(player);
-    return lifecycle.playerConnected(connection.playerId(), connection.connectionId());
+    VelocityConnectionRegistration registration = connections.register(player);
+    VelocityConnection connection = registration.connection();
+    CompletionStage<Void> result;
+    try {
+      result = lifecycle.playerConnected(connection.playerId(), connection.connectionId());
+    } catch (RuntimeException cause) {
+      rollback(registration);
+      throw cause;
+    }
+    return result.whenComplete(
+        (ignored, cause) -> {
+          if (cause != null) rollback(registration);
+        });
   }
 
   @NotNull
   public CompletionStage<Void> playerDisconnected(@NotNull Player player) {
     return connections
-        .unregister(player)
-        .map(connection -> lifecycle.playerDisconnected(connection.connectionId()))
+        .findConnection(player)
+        .map(
+            connection ->
+                lifecycle
+                    .playerDisconnected(connection.connectionId())
+                    .thenRun(() -> connections.unregister(connection)))
         .orElseGet(() -> CompletableFuture.completedFuture(null));
+  }
+
+  private void rollback(VelocityConnectionRegistration registration) {
+    if (registration.created()) connections.unregister(registration.connection());
   }
 }

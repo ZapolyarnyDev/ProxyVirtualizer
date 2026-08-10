@@ -16,16 +16,16 @@ public final class VelocityConnectionRegistry {
   private final Map<ConnectionId, VelocityConnection> connectionsById = new HashMap<>();
 
   @NotNull
-  public synchronized VelocityConnection register(@NotNull Player player) {
+  public synchronized VelocityConnectionRegistration register(@NotNull Player player) {
     Objects.requireNonNull(player, "player");
     VelocityConnection existing = connectionsByPlayer.get(player);
-    if (existing != null) return existing;
+    if (existing != null) return new VelocityConnectionRegistration(existing, false);
 
     VelocityConnection connection =
         new VelocityConnection(player, new PlayerId(player.getUniqueId()), ConnectionId.random());
     connectionsByPlayer.put(player, connection);
     connectionsById.put(connection.connectionId(), connection);
-    return connection;
+    return new VelocityConnectionRegistration(connection, true);
   }
 
   @NotNull
@@ -47,6 +47,18 @@ public final class VelocityConnectionRegistry {
     VelocityConnection connection = connectionsByPlayer.remove(player);
     if (connection == null) return Optional.empty();
 
+    connectionsById.remove(connection.connectionId(), connection);
+    return Optional.of(connection);
+  }
+
+  @NotNull
+  public synchronized Optional<VelocityConnection> unregister(
+      @NotNull VelocityConnection connection) {
+    Objects.requireNonNull(connection, "connection");
+    VelocityConnection registered = connectionsByPlayer.get(connection.player());
+    if (registered != connection) return Optional.empty();
+
+    connectionsByPlayer.remove(connection.player());
     connectionsById.remove(connection.connectionId(), connection);
     return Optional.of(connection);
   }
