@@ -7,18 +7,27 @@ import io.github.zapolyarnydev.proxyvirtualizer.core.runtime.signal.SessionOpene
 import io.github.zapolyarnydev.proxyvirtualizer.core.runtime.signal.dispatch.RuntimeSignalListener;
 import io.github.zapolyarnydev.proxyvirtualizer.core.runtime.snapshot.SessionSnapshot;
 import io.github.zapolyarnydev.proxyvirtualizer.core.session.ConnectionId;
+import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.profile.ProtocolPhase;
+import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.profile.ProtocolProfile;
+import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.profile.ProtocolVersion;
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.transport.SessionTransport;
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.transport.TransportCloseReason;
+import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.transport.TransportState;
+import io.github.zapolyarnydev.proxyvirtualizer.protocol.registry.ProtocolRegistry;
 import io.github.zapolyarnydev.proxyvirtualizer.velocity.adapter.connection.VelocityConnection;
 import io.github.zapolyarnydev.proxyvirtualizer.velocity.adapter.connection.VelocityConnectionRegistry;
 import io.github.zapolyarnydev.proxyvirtualizer.velocity.plugin.session.port.CoreSessionCloser;
 import io.github.zapolyarnydev.proxyvirtualizer.velocity.plugin.session.port.SessionTransportFailureHandler;
 import io.github.zapolyarnydev.proxyvirtualizer.velocity.plugin.session.port.VelocitySessionTransportFactory;
+import io.github.zapolyarnydev.proxyvirtualizer.velocity.plugin.session.protocol.VelocitySessionProtocol;
+import io.github.zapolyarnydev.proxyvirtualizer.velocity.plugin.session.protocol.VelocitySessionProtocolFactory;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.function.LongSupplier;
 import org.jetbrains.annotations.NotNull;
 
 public final class VelocitySessionTransportCoordinator
@@ -28,6 +37,8 @@ public final class VelocitySessionTransportCoordinator
   private final VelocitySessionTransportFactory transportFactory;
   private final CoreSessionCloser sessionCloser;
   private final SessionTransportFailureHandler failureHandler;
+  private final ProtocolRegistry protocols;
+  private final VelocitySessionProtocolFactory protocolFactory;
   private final Map<ConnectionId, VelocitySessionTransportBinding> transportsByConnectionId =
       new HashMap<>();
   private boolean closed;
@@ -36,11 +47,30 @@ public final class VelocitySessionTransportCoordinator
       @NotNull VelocityConnectionRegistry connections,
       @NotNull VelocitySessionTransportFactory transportFactory,
       @NotNull CoreSessionCloser sessionCloser,
-      @NotNull SessionTransportFailureHandler failureHandler) {
+      @NotNull SessionTransportFailureHandler failureHandler,
+      @NotNull ProtocolRegistry protocols) {
+    this(
+        connections,
+        transportFactory,
+        sessionCloser,
+        failureHandler,
+        protocols,
+        () -> ThreadLocalRandom.current().nextLong());
+  }
+
+  VelocitySessionTransportCoordinator(
+      @NotNull VelocityConnectionRegistry connections,
+      @NotNull VelocitySessionTransportFactory transportFactory,
+      @NotNull CoreSessionCloser sessionCloser,
+      @NotNull SessionTransportFailureHandler failureHandler,
+      @NotNull ProtocolRegistry protocols,
+      @NotNull LongSupplier keepAliveIds) {
     this.connections = Objects.requireNonNull(connections, "connections");
     this.transportFactory = Objects.requireNonNull(transportFactory, "transportFactory");
     this.sessionCloser = Objects.requireNonNull(sessionCloser, "sessionCloser");
     this.failureHandler = Objects.requireNonNull(failureHandler, "failureHandler");
+    this.protocols = Objects.requireNonNull(protocols, "protocols");
+    protocolFactory = new VelocitySessionProtocolFactory(protocols, keepAliveIds);
   }
 
   @Override
@@ -69,6 +99,20 @@ public final class VelocitySessionTransportCoordinator
       return;
     }
 
+    ProtocolVersion version;
+    ProtocolProfile profile;
+    try {
+      version =
+          ProtocolVersion.of(
+              Objects.requireNonNull(
+                      connection.player().getProtocolVersion(), "player protocol version")
+                  .getProtocol());
+      profile = protocols.profiles().require(version, ProtocolPhase.PLAY);
+    } catch (RuntimeException cause) {
+      reconcileCoreSession(session, cause);
+      return;
+    }
+
     SessionTransport transport;
     try {
       transport =
@@ -79,8 +123,15 @@ public final class VelocitySessionTransportCoordinator
       return;
     }
 
+    VelocitySessionProtocol protocol =
+        protocolFactory.create(
+            version,
+            profile,
+            ProtocolPhase.PLAY,
+            transport,
+            cause -> protocolFailed(session, cause));
     VelocitySessionTransportBinding active =
-        new VelocitySessionTransportBinding(session, transport);
+        new VelocitySessionTransportBinding(session, transport, protocol);
     if (!install(active)) {
       closeTransport(active, TransportCloseReason.REQUESTED);
       return;
@@ -89,13 +140,18 @@ public final class VelocitySessionTransportCoordinator
     try {
       transport.start(
           new VelocitySessionTransportListener(
-              reason -> transportClosed(active), cause -> transportFailed(active, cause)));
+              active.protocol()::onOpened,
+              active.protocol()::onInboundFrame,
+              cause -> sessionFailed(active, cause, TransportCloseReason.PROTOCOL_ERROR),
+              reason -> transportClosed(active),
+              cause -> transportFailed(active, cause)));
     } catch (RuntimeException cause) {
       transportFailed(active, cause);
       return;
     }
 
-    if (!isActive(active) && !transport.state().isTerminal())
+    TransportState state = transport.state();
+    if (!isActive(active) && state != TransportState.CLOSING && !state.isTerminal())
       closeTransport(active, TransportCloseReason.REQUESTED);
   }
 
@@ -114,15 +170,28 @@ public final class VelocitySessionTransportCoordinator
   }
 
   private void transportFailed(VelocitySessionTransportBinding active, Throwable cause) {
+    sessionFailed(active, cause, TransportCloseReason.TRANSPORT_FAILURE);
+  }
+
+  private void protocolFailed(SessionSnapshot session, Throwable cause) {
+    VelocitySessionTransportBinding active = find(session);
+    if (active == null) {
+      reportFailure(session, cause);
+      return;
+    }
+    sessionFailed(active, cause, TransportCloseReason.PROTOCOL_ERROR);
+  }
+
+  private void sessionFailed(
+      VelocitySessionTransportBinding active, Throwable cause, TransportCloseReason closeReason) {
     boolean owned = remove(active);
     if (!owned) {
-      if (!active.transport().state().isTerminal())
-        closeTransport(active, TransportCloseReason.TRANSPORT_FAILURE);
+      if (!active.transport().state().isTerminal()) closeTransport(active, closeReason);
       return;
     }
 
     try {
-      closeTransport(active, TransportCloseReason.TRANSPORT_FAILURE);
+      closeTransport(active, closeReason);
     } finally {
       reconcileCoreSession(active.session(), cause);
     }
@@ -190,6 +259,12 @@ public final class VelocitySessionTransportCoordinator
 
   private synchronized boolean isActive(VelocitySessionTransportBinding active) {
     return transportsByConnectionId.get(active.session().connectionId()) == active;
+  }
+
+  private synchronized VelocitySessionTransportBinding find(SessionSnapshot session) {
+    VelocitySessionTransportBinding active = transportsByConnectionId.get(session.connectionId());
+    if (active == null || !active.session().id().equals(session.id())) return null;
+    return active;
   }
 
   private synchronized List<VelocitySessionTransportBinding> drainTransports() {

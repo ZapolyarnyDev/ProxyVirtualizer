@@ -8,6 +8,8 @@ import com.velocitypowered.api.plugin.Plugin;
 import com.velocitypowered.api.proxy.ProxyServer;
 import io.github.zapolyarnydev.proxyvirtualizer.core.runtime.VirtualizerRuntime;
 import io.github.zapolyarnydev.proxyvirtualizer.core.runtime.signal.dispatch.RuntimeSignalBus;
+import io.github.zapolyarnydev.proxyvirtualizer.protocol.minecraft.Minecraft26_2Protocol;
+import io.github.zapolyarnydev.proxyvirtualizer.protocol.registry.ProtocolRegistry;
 import io.github.zapolyarnydev.proxyvirtualizer.velocity.adapter.connection.VelocityConnectionRegistry;
 import io.github.zapolyarnydev.proxyvirtualizer.velocity.adapter.connection.VelocityPlayerConnectionLifecycle;
 import io.github.zapolyarnydev.proxyvirtualizer.velocity.adapter.connection.VelocityPlayerConnectionListener;
@@ -40,13 +42,15 @@ public final class ProxyVirtualizerVelocityPlugin {
 
     var connections = new VelocityConnectionRegistry();
     var lifecycle = new VelocityPlayerConnectionLifecycle(runtime, connections);
+    var protocols = new ProtocolRegistry();
+    Minecraft26_2Protocol.install(protocols);
     transportCoordinator =
         new VelocitySessionTransportCoordinator(
             connections,
             VelocitySessionTransport::create,
             runtime::closeSession,
-            (session, cause) ->
-                logger.error("Session transport failed for " + session.id(), cause));
+            (session, cause) -> logger.error("Session transport failed for " + session.id(), cause),
+            protocols);
     playerConnectionListener =
         new VelocityPlayerConnectionListener(
             lifecycle, cause -> logger.error("Player connection lifecycle failed", cause));

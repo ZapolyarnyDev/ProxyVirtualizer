@@ -11,14 +11,18 @@ import io.github.zapolyarnydev.proxyvirtualizer.core.runtime.snapshot.SessionSna
 import io.github.zapolyarnydev.proxyvirtualizer.core.session.PlayerId;
 import io.github.zapolyarnydev.proxyvirtualizer.core.session.SessionId;
 import io.github.zapolyarnydev.proxyvirtualizer.core.session.SessionState;
+import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.transport.InboundFrame;
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.transport.OutboundFrame;
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.transport.SessionTransport;
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.transport.TransportCloseReason;
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.transport.TransportListener;
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.transport.TransportState;
+import io.github.zapolyarnydev.proxyvirtualizer.protocol.minecraft.Minecraft26_2Protocol;
+import io.github.zapolyarnydev.proxyvirtualizer.protocol.registry.ProtocolRegistry;
 import io.github.zapolyarnydev.proxyvirtualizer.velocity.adapter.connection.VelocityConnection;
 import io.github.zapolyarnydev.proxyvirtualizer.velocity.adapter.connection.VelocityConnectionRegistry;
 import java.lang.reflect.Proxy;
+import java.nio.ByteBuffer;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -33,6 +37,8 @@ import org.junit.jupiter.api.Test;
 
 final class VelocitySessionTransportCoordinatorTest {
 
+  private static final long KEEP_ALIVE_ID = -7_612_481_992L;
+
   @Test
   void startsTransportWhenSessionOpens() {
     Fixture fixture = new Fixture();
@@ -41,6 +47,114 @@ final class VelocitySessionTransportCoordinatorTest {
 
     assertThat(fixture.transports).hasSize(1);
     assertThat(fixture.transport().startCount).isOne();
+    assertThat(fixture.transport().sentFrames)
+        .singleElement()
+        .satisfies(
+            frame -> {
+              assertThat(frame.packetId())
+                  .isEqualTo(Minecraft26_2Protocol.CLIENTBOUND_KEEP_ALIVE_ID);
+              assertThat(frame.payload().getLong()).isEqualTo(KEEP_ALIVE_ID);
+            });
+  }
+
+  @Test
+  void acceptsMatchingKeepAliveAcknowledgement() {
+    Fixture fixture = new Fixture();
+    fixture.open();
+
+    fixture.transport().receiveKeepAlive(KEEP_ALIVE_ID);
+
+    assertThat(fixture.closedPlayers).isEmpty();
+    assertThat(fixture.failures).isEmpty();
+    assertThat(fixture.transport().closeReasons).isEmpty();
+  }
+
+  @Test
+  void closesSessionOnMismatchedKeepAliveAcknowledgement() {
+    Fixture fixture = new Fixture();
+    fixture.open();
+
+    fixture.transport().receiveKeepAlive(KEEP_ALIVE_ID + 1);
+
+    assertThat(fixture.closedPlayers).containsExactly(fixture.connection.playerId());
+    assertThat(fixture.transport().closeReasons)
+        .containsExactly(TransportCloseReason.PROTOCOL_ERROR);
+    assertThat(fixture.failures)
+        .singleElement()
+        .satisfies(
+            cause ->
+                assertThat(cause)
+                    .hasMessageContaining("Could not handle semantic action")
+                    .hasRootCauseMessage(
+                        "KeepAlive acknowledgement id "
+                            + (KEEP_ALIVE_ID + 1)
+                            + " does not match expected id "
+                            + KEEP_ALIVE_ID));
+  }
+
+  @Test
+  void closesSessionWhenKeepAlivePayloadIsMalformed() {
+    Fixture fixture = new Fixture();
+    fixture.open();
+
+    fixture
+        .transport()
+        .receive(
+            new InboundFrame(
+                Minecraft26_2Protocol.SERVERBOUND_KEEP_ALIVE_ID,
+                ByteBuffer.allocate(Integer.BYTES).putInt(42).flip()));
+
+    assertThat(fixture.closedPlayers).containsExactly(fixture.connection.playerId());
+    assertThat(fixture.transport().closeReasons)
+        .containsExactly(TransportCloseReason.PROTOCOL_ERROR);
+    assertThat(fixture.failures)
+        .singleElement()
+        .satisfies(cause -> assertThat(cause).hasMessageContaining("Malformed serverbound packet"));
+  }
+
+  @Test
+  void observesAsynchronousKeepAliveSendFailure() {
+    Fixture fixture = new Fixture(FailingSendTransport::new);
+
+    fixture.open();
+
+    assertThat(fixture.closedPlayers).containsExactly(fixture.connection.playerId());
+    assertThat(fixture.transport().closeReasons)
+        .containsExactly(TransportCloseReason.PROTOCOL_ERROR);
+    assertThat(fixture.failures)
+        .singleElement()
+        .extracting(Throwable::getMessage)
+        .isEqualTo("send failed");
+  }
+
+  @Test
+  void reportsLateSendFailureAfterSessionWasAlreadyClosed() {
+    DelayedSendTransport transport = new DelayedSendTransport();
+    Fixture fixture = new Fixture(() -> transport);
+    fixture.open();
+    fixture.coordinator.onSignal(new SessionClosedSignal(fixture.closedSession()));
+
+    transport.sendCompletion.completeExceptionally(new IllegalStateException("late send failed"));
+
+    assertThat(fixture.failures)
+        .singleElement()
+        .extracting(Throwable::getMessage)
+        .isEqualTo("late send failed");
+  }
+
+  @Test
+  void rejectsUnsupportedNegotiatedProtocolBeforeCreatingTransport() {
+    Fixture fixture =
+        new Fixture(com.velocitypowered.api.network.ProtocolVersion.MINECRAFT_1_21_11);
+
+    fixture.open();
+
+    assertThat(fixture.transports).isEmpty();
+    assertThat(fixture.closedPlayers).containsExactly(fixture.connection.playerId());
+    assertThat(fixture.failures)
+        .singleElement()
+        .satisfies(
+            cause -> assertThat(cause).hasMessageContaining("Unsupported protocol version: 774"));
   }
 
   @Test
@@ -222,13 +336,15 @@ final class VelocitySessionTransportCoordinatorTest {
         .containsExactly(TransportCloseReason.REMOTE_CLOSED);
   }
 
-  private static Player player(UUID uniqueId) {
+  private static Player player(
+      UUID uniqueId, com.velocitypowered.api.network.ProtocolVersion protocolVersion) {
     return (Player)
         Proxy.newProxyInstance(
             Player.class.getClassLoader(),
             new Class<?>[] {Player.class},
             (proxy, method, arguments) -> {
               if (method.getName().equals("getUniqueId")) return uniqueId;
+              if (method.getName().equals("getProtocolVersion")) return protocolVersion;
 
               throw new UnsupportedOperationException(method.getName());
             });
@@ -237,15 +353,8 @@ final class VelocitySessionTransportCoordinatorTest {
   private static final class Fixture {
 
     private final VelocityConnectionRegistry connections = new VelocityConnectionRegistry();
-    private final VelocityConnection connection =
-        connections.register(player(UUID.randomUUID())).connection();
-    private final SessionSnapshot session =
-        new SessionSnapshot(
-            SessionId.random(),
-            connection.playerId(),
-            connection.connectionId(),
-            SessionState.ACTIVE,
-            Instant.EPOCH);
+    private final VelocityConnection connection;
+    private final SessionSnapshot session;
     private final List<FakeTransport> transports = new ArrayList<>();
     private final List<PlayerId> closedPlayers = new ArrayList<>();
     private final List<Throwable> failures = new ArrayList<>();
@@ -253,10 +362,30 @@ final class VelocitySessionTransportCoordinatorTest {
     private final VelocitySessionTransportCoordinator coordinator;
 
     private Fixture() {
-      this(FakeTransport::new);
+      this(FakeTransport::new, com.velocitypowered.api.network.ProtocolVersion.MINECRAFT_26_2);
+    }
+
+    private Fixture(com.velocitypowered.api.network.ProtocolVersion protocolVersion) {
+      this(FakeTransport::new, protocolVersion);
     }
 
     private Fixture(Supplier<? extends FakeTransport> transportSupplier) {
+      this(transportSupplier, com.velocitypowered.api.network.ProtocolVersion.MINECRAFT_26_2);
+    }
+
+    private Fixture(
+        Supplier<? extends FakeTransport> transportSupplier,
+        com.velocitypowered.api.network.ProtocolVersion protocolVersion) {
+      connection = connections.register(player(UUID.randomUUID(), protocolVersion)).connection();
+      session =
+          new SessionSnapshot(
+              SessionId.random(),
+              connection.playerId(),
+              connection.connectionId(),
+              SessionState.ACTIVE,
+              Instant.EPOCH);
+      ProtocolRegistry protocols = new ProtocolRegistry();
+      Minecraft26_2Protocol.install(protocols);
       coordinator =
           new VelocitySessionTransportCoordinator(
               connections,
@@ -269,7 +398,9 @@ final class VelocitySessionTransportCoordinatorTest {
                 closedPlayers.add(playerId);
                 return coreCloseResult;
               },
-              (session, cause) -> failures.add(cause));
+              (session, cause) -> failures.add(cause),
+              protocols,
+              () -> KEEP_ALIVE_ID);
     }
 
     private void open() {
@@ -302,6 +433,7 @@ final class VelocitySessionTransportCoordinatorTest {
   private static class FakeTransport implements SessionTransport {
 
     private final List<TransportCloseReason> closeReasons = new ArrayList<>();
+    private final List<OutboundFrame> sentFrames = new ArrayList<>();
     private TransportState state = TransportState.NEW;
     private TransportListener listener;
     private int startCount;
@@ -321,6 +453,7 @@ final class VelocitySessionTransportCoordinatorTest {
 
     @Override
     public @NotNull CompletionStage<Void> send(@NotNull OutboundFrame frame) {
+      sentFrames.add(frame);
       return CompletableFuture.completedFuture(null);
     }
 
@@ -340,6 +473,17 @@ final class VelocitySessionTransportCoordinatorTest {
     private void remoteClose() {
       state = TransportState.CLOSED;
       listener.onClosed(TransportCloseReason.REMOTE_CLOSED);
+    }
+
+    private void receiveKeepAlive(long id) {
+      receive(
+          new InboundFrame(
+              Minecraft26_2Protocol.SERVERBOUND_KEEP_ALIVE_ID,
+              ByteBuffer.allocate(Long.BYTES).putLong(id).flip()));
+    }
+
+    private void receive(InboundFrame frame) {
+      listener.onInboundFrame(frame);
     }
 
     final List<TransportCloseReason> closeReasons() {
@@ -362,6 +506,24 @@ final class VelocitySessionTransportCoordinatorTest {
     @Override
     public @NotNull CompletionStage<Void> close(@NotNull TransportCloseReason reason) {
       return CompletableFuture.failedFuture(new IllegalStateException("close failed"));
+    }
+  }
+
+  private static final class FailingSendTransport extends FakeTransport {
+
+    @Override
+    public @NotNull CompletionStage<Void> send(@NotNull OutboundFrame frame) {
+      return CompletableFuture.failedFuture(new IllegalStateException("send failed"));
+    }
+  }
+
+  private static final class DelayedSendTransport extends FakeTransport {
+
+    private final CompletableFuture<Void> sendCompletion = new CompletableFuture<>();
+
+    @Override
+    public @NotNull CompletionStage<Void> send(@NotNull OutboundFrame frame) {
+      return sendCompletion;
     }
   }
 

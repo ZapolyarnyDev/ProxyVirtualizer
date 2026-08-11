@@ -11,6 +11,7 @@ dependencies {
     implementation(project(":velocity-adapter"))
     implementation(project(":velocity-netty-bridge"))
     implementation(project(":virtualizer-protocol-api"))
+    implementation(project(":virtualizer-protocol"))
     compileOnly(rootProject.libs.velocity.api)
     annotationProcessor(rootProject.libs.velocity.api)
     testImplementation(rootProject.libs.velocity.api)
