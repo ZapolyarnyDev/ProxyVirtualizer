@@ -17,7 +17,7 @@ public final class ServerboundKeepAliveCodec implements PacketCodec<ServerboundK
   }
 
   @Override
-  public void encode(@NotNull ServerboundKeepAlivePacket packet, @NotNull ByteBuffer output) {
-    output.putLong(packet.id());
+  public @NotNull ByteBuffer encode(@NotNull ServerboundKeepAlivePacket packet) {
+    return ByteBuffer.allocate(Long.BYTES).putLong(packet.id()).flip();
   }
 }

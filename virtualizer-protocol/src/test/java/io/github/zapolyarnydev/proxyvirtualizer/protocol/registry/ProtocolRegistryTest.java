@@ -3,10 +3,10 @@ package io.github.zapolyarnydev.proxyvirtualizer.protocol.registry;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.action.PacketActionMapper;
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.packet.ClientboundPacket;
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.packet.PacketCodec;
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.packet.PacketDirection;
-import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.packet.PacketHandler;
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.packet.PacketId;
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.packet.ServerboundPacket;
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.profile.ProtocolCapability;
@@ -14,8 +14,8 @@ import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.profile.ProtocolPha
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.profile.ProtocolProfile;
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.profile.ProtocolProfileId;
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.profile.ProtocolVersion;
+import io.github.zapolyarnydev.proxyvirtualizer.protocol.registry.exception.DuplicatePacketActionMapperException;
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.registry.exception.DuplicatePacketCodecException;
-import io.github.zapolyarnydev.proxyvirtualizer.protocol.registry.exception.DuplicatePacketHandlerException;
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.registry.exception.DuplicateProtocolProfileException;
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.registry.exception.DuplicateProtocolVersionException;
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.registry.exception.UnsupportedProtocolPhaseException;
@@ -120,6 +120,20 @@ final class ProtocolRegistryTest {
   }
 
   @Test
+  void resolvesClientboundCodecAndPacketIdByPacketType() {
+    PacketCodec<TestClientboundPacket> codec = new TestClientboundCodec();
+    PacketId packetId = new PacketId(42);
+    registry.codecs().registerClientbound(PROFILE_ID, ProtocolPhase.PLAY, packetId, codec);
+
+    assertThat(
+            registry
+                .codecs()
+                .findClientbound(
+                    COMPATIBLE_VERSION, ProtocolPhase.PLAY, TestClientboundPacket.class))
+        .contains(new RegisteredPacketCodec<>(packetId, codec));
+  }
+
+  @Test
   void resolvesSamePacketIdInDifferentPhases() {
     PacketCodec<TestClientboundPacket> loginCodec = new TestClientboundCodec();
     PacketCodec<TestClientboundPacket> playCodec = new TestClientboundCodec();
@@ -162,6 +176,30 @@ final class ProtocolRegistryTest {
   }
 
   @Test
+  void rejectsSecondClientboundPacketIdForSamePacketTypeWithoutPartiallyRegisteringIt() {
+    registry
+        .codecs()
+        .registerClientbound(
+            PROFILE_ID, ProtocolPhase.PLAY, new PacketId(42), new TestClientboundCodec());
+
+    assertThatThrownBy(
+            () ->
+                registry
+                    .codecs()
+                    .registerClientbound(
+                        PROFILE_ID,
+                        ProtocolPhase.PLAY,
+                        new PacketId(43),
+                        new TestClientboundCodec()))
+        .isInstanceOf(DuplicatePacketCodecException.class);
+    assertThat(
+            registry
+                .codecs()
+                .find(VERSION, ProtocolPhase.PLAY, PacketDirection.CLIENTBOUND, new PacketId(43)))
+        .isEmpty();
+  }
+
+  @Test
   void rejectsCodecRegistrationForUnsupportedPhase() {
     assertThatThrownBy(
             () ->
@@ -176,36 +214,39 @@ final class ProtocolRegistryTest {
   }
 
   @Test
-  void resolvesHandlerByVersionAndPacketType() {
-    PacketHandler<TestServerboundPacket> handler = (context, packet) -> {};
+  void resolvesActionMapperByVersionAndPacketType() {
+    PacketActionMapper<TestServerboundPacket> mapper = (context, packet, actions) -> {};
     registry
-        .handlers()
-        .register(PROFILE_ID, ProtocolPhase.PLAY, TestServerboundPacket.class, handler);
+        .actionMappers()
+        .register(PROFILE_ID, ProtocolPhase.PLAY, TestServerboundPacket.class, mapper);
 
     assertThat(
             registry
-                .handlers()
+                .actionMappers()
                 .find(COMPATIBLE_VERSION, ProtocolPhase.PLAY, TestServerboundPacket.class))
-        .containsSame(handler);
+        .containsSame(mapper);
   }
 
   @Test
-  void rejectsDuplicateHandlerRegistration() {
+  void rejectsDuplicateActionMapperRegistration() {
     registry
-        .handlers()
+        .actionMappers()
         .register(
-            PROFILE_ID, ProtocolPhase.PLAY, TestServerboundPacket.class, (context, packet) -> {});
+            PROFILE_ID,
+            ProtocolPhase.PLAY,
+            TestServerboundPacket.class,
+            (context, packet, actions) -> {});
 
     assertThatThrownBy(
             () ->
                 registry
-                    .handlers()
+                    .actionMappers()
                     .register(
                         PROFILE_ID,
                         ProtocolPhase.PLAY,
                         TestServerboundPacket.class,
-                        (context, packet) -> {}))
-        .isInstanceOf(DuplicatePacketHandlerException.class);
+                        (context, packet, actions) -> {}))
+        .isInstanceOf(DuplicatePacketActionMapperException.class);
   }
 
   private record TestProtocolProfile(
@@ -232,6 +273,8 @@ final class ProtocolRegistryTest {
     }
 
     @Override
-    public void encode(@NotNull TestClientboundPacket packet, @NotNull ByteBuffer output) {}
+    public @NotNull ByteBuffer encode(@NotNull TestClientboundPacket packet) {
+      return ByteBuffer.allocate(0);
+    }
   }
 }

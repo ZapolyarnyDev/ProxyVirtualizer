@@ -4,7 +4,7 @@ public final class ProtocolRegistry {
 
   private final ProtocolProfileRegistry profiles = new ProtocolProfileRegistry();
   private final PacketCodecRegistry codecs = new PacketCodecRegistry(profiles);
-  private final PacketHandlerRegistry handlers = new PacketHandlerRegistry(profiles);
+  private final PacketActionMapperRegistry actionMappers = new PacketActionMapperRegistry(profiles);
 
   public ProtocolProfileRegistry profiles() {
     return profiles;
@@ -14,7 +14,7 @@ public final class ProtocolRegistry {
     return codecs;
   }
 
-  public PacketHandlerRegistry handlers() {
-    return handlers;
+  public PacketActionMapperRegistry actionMappers() {
+    return actionMappers;
   }
 }

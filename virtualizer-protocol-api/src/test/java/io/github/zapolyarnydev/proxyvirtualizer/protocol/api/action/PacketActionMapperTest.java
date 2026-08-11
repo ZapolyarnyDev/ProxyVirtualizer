@@ -40,6 +40,11 @@ final class PacketActionMapperTest {
   private static final class TestProtocolContext implements ProtocolContext {
 
     @Override
+    public ProtocolVersion version() {
+      return new ProtocolVersion(769);
+    }
+
+    @Override
     public ProtocolProfile profile() {
       return new ProtocolProfile() {
         @Override

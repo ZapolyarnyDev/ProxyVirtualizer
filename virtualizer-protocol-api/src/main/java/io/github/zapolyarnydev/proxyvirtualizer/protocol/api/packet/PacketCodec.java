@@ -11,5 +11,7 @@ public interface PacketCodec<P extends ProtocolPacket> {
   @NotNull
   P decode(@NotNull ByteBuffer input);
 
-  void encode(@NotNull P packet, @NotNull ByteBuffer output);
+  /** Returns a buffer whose remaining bytes are the complete packet payload. */
+  @NotNull
+  ByteBuffer encode(@NotNull P packet);
 }

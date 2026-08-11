@@ -58,7 +58,7 @@ public final class ProtocolProfileRegistry {
         .orElseThrow(
             () ->
                 new UnsupportedProtocolVersionException(
-                    "Unsupported protocol version: " + version));
+                    "Unsupported protocol version: " + version.number()));
   }
 
   public ProtocolProfile require(ProtocolVersion version, ProtocolPhase phase) {
