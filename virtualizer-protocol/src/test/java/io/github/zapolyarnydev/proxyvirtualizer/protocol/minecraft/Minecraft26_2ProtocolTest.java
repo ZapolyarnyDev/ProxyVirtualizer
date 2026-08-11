@@ -21,7 +21,7 @@ final class Minecraft26_2ProtocolTest {
             registry
                 .profiles()
                 .require(Minecraft26_2Protocol.VERSION)
-                .supports(Minecraft26_2Protocol.INBOUND_KEEP_ALIVE))
+                .supports(Minecraft26_2Protocol.KEEP_ALIVE))
         .isTrue();
     assertThat(
             registry
@@ -31,6 +31,23 @@ final class Minecraft26_2ProtocolTest {
                     ProtocolPhase.PLAY,
                     PacketDirection.SERVERBOUND,
                     Minecraft26_2Protocol.SERVERBOUND_KEEP_ALIVE_ID))
+        .isPresent();
+    assertThat(
+            registry
+                .codecs()
+                .find(
+                    Minecraft26_2Protocol.VERSION,
+                    ProtocolPhase.PLAY,
+                    PacketDirection.CLIENTBOUND,
+                    Minecraft26_2Protocol.CLIENTBOUND_KEEP_ALIVE_ID))
+        .isPresent();
+    assertThat(
+            registry
+                .actionMappers()
+                .find(
+                    Minecraft26_2Protocol.VERSION,
+                    ProtocolPhase.PLAY,
+                    ServerboundKeepAlivePacket.class))
         .isPresent();
   }
 }
