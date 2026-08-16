@@ -153,11 +153,12 @@ public final class VelocitySessionTransportCoordinator
       closeTransport(active, TransportCloseReason.REQUESTED);
       return;
     }
+    active.beginSwitching();
 
     try {
       transport.start(
           new VelocitySessionTransportListener(
-              active.protocol()::onOpened,
+              () -> transportOpened(active),
               active.protocol()::onInboundFrame,
               cause -> sessionFailed(active, cause, TransportCloseReason.PROTOCOL_ERROR),
               reason -> transportClosed(active),
@@ -182,8 +183,18 @@ public final class VelocitySessionTransportCoordinator
     if (active != null) closeTransport(active, closeReason);
   }
 
+  private void transportOpened(VelocitySessionTransportBinding active) {
+    if (!isActive(active) || !active.isSwitching()) return;
+
+    active.protocol().onOpened();
+    active.completeSwitching();
+  }
+
   private void transportClosed(VelocitySessionTransportBinding active) {
-    if (remove(active)) closeCoreSession(active.session());
+    if (remove(active)) {
+      active.beginClosing();
+      closeCoreSession(active.session());
+    }
   }
 
   private void transportFailed(VelocitySessionTransportBinding active, Throwable cause) {
@@ -221,6 +232,8 @@ public final class VelocitySessionTransportCoordinator
 
   private void closeTransport(
       VelocitySessionTransportBinding active, TransportCloseReason closeReason) {
+    if (!active.beginClosing()) return;
+
     active.protocol().close();
     try {
       active
