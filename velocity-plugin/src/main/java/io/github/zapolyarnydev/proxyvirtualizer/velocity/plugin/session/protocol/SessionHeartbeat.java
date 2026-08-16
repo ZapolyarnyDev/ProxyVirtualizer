@@ -3,6 +3,7 @@ package io.github.zapolyarnydev.proxyvirtualizer.velocity.plugin.session.protoco
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.action.KeepAliveAcknowledged;
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.minecraft.ClientboundKeepAlivePacket;
 import java.util.Objects;
+import java.util.concurrent.ScheduledFuture;
 import java.util.function.LongSupplier;
 
 final class SessionHeartbeat {
@@ -10,6 +11,7 @@ final class SessionHeartbeat {
   private final LongSupplier idSource;
   private State state = State.NEW;
   private long expectedId;
+  private ScheduledFuture<?> timeout;
 
   SessionHeartbeat(LongSupplier idSource) {
     this.idSource = Objects.requireNonNull(idSource, "idSource");
@@ -39,15 +41,37 @@ final class SessionHeartbeat {
               + expectedId);
     }
     state = State.ACKNOWLEDGED;
+    cancelTimeout();
+  }
+
+  synchronized void armTimeout(ScheduledFuture<?> timeout) {
+    this.timeout = Objects.requireNonNull(timeout, "timeout");
+    if (state != State.AWAITING_ACKNOWLEDGEMENT) cancelTimeout();
+  }
+
+  synchronized boolean expire() {
+    if (state != State.AWAITING_ACKNOWLEDGEMENT) return false;
+
+    state = State.TIMED_OUT;
+    return true;
+  }
+
+  synchronized void close() {
+    cancelTimeout();
   }
 
   synchronized boolean isAcknowledged() {
     return state == State.ACKNOWLEDGED;
   }
 
+  private void cancelTimeout() {
+    if (timeout != null) timeout.cancel(false);
+  }
+
   private enum State {
     NEW,
     AWAITING_ACKNOWLEDGEMENT,
-    ACKNOWLEDGED
+    ACKNOWLEDGED,
+    TIMED_OUT
   }
 }

@@ -21,11 +21,14 @@ import io.github.zapolyarnydev.proxyvirtualizer.velocity.plugin.session.port.Ses
 import io.github.zapolyarnydev.proxyvirtualizer.velocity.plugin.session.port.VelocitySessionTransportFactory;
 import io.github.zapolyarnydev.proxyvirtualizer.velocity.plugin.session.protocol.VelocitySessionProtocol;
 import io.github.zapolyarnydev.proxyvirtualizer.velocity.plugin.session.protocol.VelocitySessionProtocolFactory;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.LongSupplier;
 import org.jetbrains.annotations.NotNull;
@@ -39,6 +42,7 @@ public final class VelocitySessionTransportCoordinator
   private final SessionTransportFailureHandler failureHandler;
   private final ProtocolRegistry protocols;
   private final VelocitySessionProtocolFactory protocolFactory;
+  private final ScheduledExecutorService heartbeatScheduler;
   private final Map<ConnectionId, VelocitySessionTransportBinding> transportsByConnectionId =
       new HashMap<>();
   private boolean closed;
@@ -55,7 +59,14 @@ public final class VelocitySessionTransportCoordinator
         sessionCloser,
         failureHandler,
         protocols,
-        () -> ThreadLocalRandom.current().nextLong());
+        () -> ThreadLocalRandom.current().nextLong(),
+        Executors.newSingleThreadScheduledExecutor(
+            runnable -> {
+              Thread thread = new Thread(runnable, "proxyvirtualizer-heartbeat");
+              thread.setDaemon(true);
+              return thread;
+            }),
+        Duration.ofSeconds(30));
   }
 
   VelocitySessionTransportCoordinator(
@@ -64,13 +75,18 @@ public final class VelocitySessionTransportCoordinator
       @NotNull CoreSessionCloser sessionCloser,
       @NotNull SessionTransportFailureHandler failureHandler,
       @NotNull ProtocolRegistry protocols,
-      @NotNull LongSupplier keepAliveIds) {
+      @NotNull LongSupplier keepAliveIds,
+      @NotNull ScheduledExecutorService heartbeatScheduler,
+      @NotNull Duration heartbeatTimeout) {
     this.connections = Objects.requireNonNull(connections, "connections");
     this.transportFactory = Objects.requireNonNull(transportFactory, "transportFactory");
     this.sessionCloser = Objects.requireNonNull(sessionCloser, "sessionCloser");
     this.failureHandler = Objects.requireNonNull(failureHandler, "failureHandler");
     this.protocols = Objects.requireNonNull(protocols, "protocols");
-    protocolFactory = new VelocitySessionProtocolFactory(protocols, keepAliveIds);
+    this.heartbeatScheduler = Objects.requireNonNull(heartbeatScheduler, "heartbeatScheduler");
+    protocolFactory =
+        new VelocitySessionProtocolFactory(
+            protocols, keepAliveIds, heartbeatScheduler, heartbeatTimeout);
   }
 
   @Override
@@ -88,6 +104,7 @@ public final class VelocitySessionTransportCoordinator
   @Override
   public void close() {
     drainTransports().forEach(active -> closeTransport(active, TransportCloseReason.REQUESTED));
+    heartbeatScheduler.shutdownNow();
   }
 
   private void open(SessionSnapshot session) {
@@ -204,6 +221,7 @@ public final class VelocitySessionTransportCoordinator
 
   private void closeTransport(
       VelocitySessionTransportBinding active, TransportCloseReason closeReason) {
+    active.protocol().close();
     try {
       active
           .transport()

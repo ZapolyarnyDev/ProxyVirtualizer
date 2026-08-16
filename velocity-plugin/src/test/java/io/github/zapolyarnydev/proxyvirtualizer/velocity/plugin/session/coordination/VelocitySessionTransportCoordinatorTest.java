@@ -23,6 +23,7 @@ import io.github.zapolyarnydev.proxyvirtualizer.velocity.adapter.connection.Velo
 import io.github.zapolyarnydev.proxyvirtualizer.velocity.adapter.connection.VelocityConnectionRegistry;
 import java.lang.reflect.Proxy;
 import java.nio.ByteBuffer;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -30,6 +31,8 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 import org.jetbrains.annotations.NotNull;
@@ -110,6 +113,22 @@ final class VelocitySessionTransportCoordinatorTest {
     assertThat(fixture.failures)
         .singleElement()
         .satisfies(cause -> assertThat(cause).hasMessageContaining("Malformed serverbound packet"));
+  }
+
+  @Test
+  void closesSessionWhenKeepAliveAcknowledgementTimesOut() throws Exception {
+    Fixture fixture = new Fixture(FakeTransport::new, Duration.ofMillis(1));
+    fixture.open();
+
+    assertThat(fixture.awaitFailure()).isTrue();
+    assertThat(fixture.closedPlayers).containsExactly(fixture.connection.playerId());
+    assertThat(fixture.transport().closeReasons)
+        .containsExactly(TransportCloseReason.PROTOCOL_ERROR);
+    assertThat(fixture.failures)
+        .singleElement()
+        .extracting(Throwable::getMessage)
+        .asString()
+        .contains("KeepAlive acknowledgement was not received");
   }
 
   @Test
@@ -358,6 +377,14 @@ final class VelocitySessionTransportCoordinatorTest {
     private final List<FakeTransport> transports = new ArrayList<>();
     private final List<PlayerId> closedPlayers = new ArrayList<>();
     private final List<Throwable> failures = new ArrayList<>();
+    private final CountDownLatch failureReported = new CountDownLatch(1);
+    private final ScheduledExecutorService heartbeatScheduler =
+        Executors.newSingleThreadScheduledExecutor(
+            runnable -> {
+              Thread thread = new Thread(runnable, "test-heartbeat");
+              thread.setDaemon(true);
+              return thread;
+            });
     private CompletionStage<?> coreCloseResult = CompletableFuture.completedFuture(null);
     private final VelocitySessionTransportCoordinator coordinator;
 
@@ -374,8 +401,23 @@ final class VelocitySessionTransportCoordinatorTest {
     }
 
     private Fixture(
+        Supplier<? extends FakeTransport> transportSupplier, Duration heartbeatTimeout) {
+      this(
+          transportSupplier,
+          com.velocitypowered.api.network.ProtocolVersion.MINECRAFT_26_2,
+          heartbeatTimeout);
+    }
+
+    private Fixture(
         Supplier<? extends FakeTransport> transportSupplier,
         com.velocitypowered.api.network.ProtocolVersion protocolVersion) {
+      this(transportSupplier, protocolVersion, Duration.ofSeconds(30));
+    }
+
+    private Fixture(
+        Supplier<? extends FakeTransport> transportSupplier,
+        com.velocitypowered.api.network.ProtocolVersion protocolVersion,
+        Duration heartbeatTimeout) {
       connection = connections.register(player(UUID.randomUUID(), protocolVersion)).connection();
       session =
           new SessionSnapshot(
@@ -398,9 +440,14 @@ final class VelocitySessionTransportCoordinatorTest {
                 closedPlayers.add(playerId);
                 return coreCloseResult;
               },
-              (session, cause) -> failures.add(cause),
+              (session, cause) -> {
+                failures.add(cause);
+                failureReported.countDown();
+              },
               protocols,
-              () -> KEEP_ALIVE_ID);
+              () -> KEEP_ALIVE_ID,
+              heartbeatScheduler,
+              heartbeatTimeout);
     }
 
     private void open() {
@@ -427,6 +474,10 @@ final class VelocitySessionTransportCoordinatorTest {
 
     private FakeTransport transport() {
       return transports.getFirst();
+    }
+
+    private boolean awaitFailure() throws InterruptedException {
+      return failureReported.await(2, TimeUnit.SECONDS);
     }
   }
 
