@@ -23,7 +23,7 @@ import org.junit.jupiter.api.Test;
 final class VelocitySessionTransportTest {
 
   @Test
-  void bridgesFramesAndChannelLifecycle() {
+  void exclusivelyOwnsFramesAndChannelLifecycle() {
     EmbeddedChannel channel = new EmbeddedChannel();
     channel.pipeline().addLast("minecraft-decoder", new ChannelInboundHandlerAdapter());
     RecordingOutboundHandler compressionEncoder = new RecordingOutboundHandler();
@@ -38,16 +38,15 @@ final class VelocitySessionTransportTest {
     assertThat(listener.opened).isTrue();
 
     ByteBuf inbound = Unpooled.wrappedBuffer(new byte[] {42, 1, 2});
-    assertThat(channel.writeInbound(inbound)).isTrue();
+    assertThat(channel.writeInbound(inbound)).isFalse();
     assertThat(listener.inboundFrame.packetId()).isEqualTo(new PacketId(42));
     assertThat(listener.inboundFrame.payload()).isEqualTo(ByteBuffer.wrap(new byte[] {1, 2}));
-    ByteBuf forwardedInbound = channel.readInbound();
-    forwardedInbound.release();
+    assertThat((ByteBuf) channel.readInbound()).isNull();
 
-    transport
-        .send(new OutboundFrame(new PacketId(42), ByteBuffer.wrap(new byte[] {3, 4})))
-        .toCompletableFuture()
-        .join();
+    var sent =
+        transport.send(new OutboundFrame(new PacketId(42), ByteBuffer.wrap(new byte[] {3, 4})));
+    channel.runPendingTasks();
+    sent.toCompletableFuture().join();
     ByteBuf outbound = channel.readOutbound();
     assertThat(compressionEncoder.invoked).isTrue();
     assertThat(outbound.readByte()).isEqualTo((byte) 42);
@@ -63,6 +62,39 @@ final class VelocitySessionTransportTest {
     assertThat(transport.state()).isEqualTo(TransportState.CLOSED);
     assertThat(channel.isActive()).isTrue();
     assertThat(channel.pipeline().context("proxyvirtualizer-session-bridge")).isNull();
+  }
+
+  @Test
+  void suppressesBackendOutboundFramesWhileVirtualSessionIsOpen() {
+    EmbeddedChannel channel = new EmbeddedChannel();
+    channel.pipeline().addLast("minecraft-decoder", new ChannelInboundHandlerAdapter());
+    VelocitySessionTransport transport = VelocitySessionTransport.createForChannel(channel);
+    transport.start(new RecordingListener());
+    channel.runPendingTasks();
+
+    ByteBuf backendFrame = Unpooled.wrappedBuffer(new byte[] {42, 1, 2});
+    assertThat(channel.writeOutbound(backendFrame)).isFalse();
+
+    assertThat(backendFrame.refCnt()).isZero();
+    assertThat((ByteBuf) channel.readOutbound()).isNull();
+  }
+
+  @Test
+  void restoresBackendTrafficAfterVirtualSessionCloses() {
+    EmbeddedChannel channel = new EmbeddedChannel();
+    channel.pipeline().addLast("minecraft-decoder", new ChannelInboundHandlerAdapter());
+    VelocitySessionTransport transport = VelocitySessionTransport.createForChannel(channel);
+    transport.start(new RecordingListener());
+    channel.runPendingTasks();
+
+    transport.close(TransportCloseReason.REQUESTED);
+    channel.runPendingTasks();
+
+    ByteBuf backendFrame = Unpooled.wrappedBuffer(new byte[] {42, 1, 2});
+    assertThat(channel.writeOutbound(backendFrame)).isTrue();
+    ByteBuf forwarded = channel.readOutbound();
+    assertThat(forwarded.readableBytes()).isEqualTo(3);
+    forwarded.release();
   }
 
   @Test

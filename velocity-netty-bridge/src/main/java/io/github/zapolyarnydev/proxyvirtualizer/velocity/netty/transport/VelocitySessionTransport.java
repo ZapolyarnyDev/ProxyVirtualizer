@@ -13,6 +13,8 @@ import io.netty.channel.Channel;
 import io.netty.channel.ChannelDuplexHandler;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.ChannelPromise;
+import io.netty.util.ReferenceCountUtil;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
@@ -24,25 +26,28 @@ public final class VelocitySessionTransport implements SessionTransport {
 
   private final Channel channel;
   private final ChannelDuplexHandler handler = new BridgeHandler();
+  private final boolean exclusive;
   private boolean started;
+  private int virtualWrites;
   private volatile TransportState state = TransportState.NEW;
   private volatile TransportListener listener;
   private volatile ChannelHandlerContext context;
   private volatile TransportCloseReason closeReason = TransportCloseReason.REMOTE_CLOSED;
   private final CompletableFuture<Void> closeCompletion = new CompletableFuture<>();
 
-  private VelocitySessionTransport(Channel channel) {
+  private VelocitySessionTransport(Channel channel, boolean exclusive) {
     this.channel = Objects.requireNonNull(channel, "channel");
+    this.exclusive = exclusive;
   }
 
   @NotNull
   public static VelocitySessionTransport create(@NotNull Player player) {
     Objects.requireNonNull(player, "player");
-    return new VelocitySessionTransport(VelocityChannelAccess.channel(player));
+    return new VelocitySessionTransport(VelocityChannelAccess.channel(player), true);
   }
 
   static VelocitySessionTransport createForChannel(Channel channel) {
-    return new VelocitySessionTransport(channel);
+    return new VelocitySessionTransport(channel, true);
   }
 
   @Override
@@ -68,11 +73,36 @@ public final class VelocitySessionTransport implements SessionTransport {
       return CompletableFuture.failedFuture(new IllegalStateException("Transport is not open"));
 
     ByteBuf encoded = VelocityFrameCodec.encode(activeContext.alloc(), frame);
+    CompletableFuture<Void> completion = new CompletableFuture<>();
     try {
-      return completionStage(channel.writeAndFlush(encoded));
+      channel.eventLoop().execute(() -> writeVirtual(encoded, completion));
+      return completion;
     } catch (Throwable exception) {
       encoded.release();
       return CompletableFuture.failedFuture(exception);
+    }
+  }
+
+  private void writeVirtual(ByteBuf encoded, CompletableFuture<Void> completion) {
+    if (state != TransportState.OPEN || context == null) {
+      encoded.release();
+      completion.completeExceptionally(new IllegalStateException("Transport is not open"));
+      return;
+    }
+
+    virtualWrites++;
+    try {
+      completionStage(channel.writeAndFlush(encoded))
+          .whenComplete(
+              (ignored, cause) -> {
+                if (cause == null) completion.complete(null);
+                else completion.completeExceptionally(cause);
+              });
+    } catch (Throwable exception) {
+      encoded.release();
+      completion.completeExceptionally(exception);
+    } finally {
+      virtualWrites--;
     }
   }
 
@@ -196,8 +226,28 @@ public final class VelocitySessionTransport implements SessionTransport {
 
     @Override
     public void channelRead(ChannelHandlerContext context, Object message) throws Exception {
-      if (message instanceof ByteBuf input) handleInbound(input);
-      context.fireChannelRead(message);
+      if (!(message instanceof ByteBuf input)) {
+        context.fireChannelRead(message);
+        return;
+      }
+
+      try {
+        handleInbound(input);
+      } finally {
+        if (exclusive) ReferenceCountUtil.release(input);
+      }
+      if (!exclusive) context.fireChannelRead(message);
+    }
+
+    @Override
+    public void write(ChannelHandlerContext context, Object message, ChannelPromise promise)
+        throws Exception {
+      if (exclusive && message instanceof ByteBuf && virtualWrites == 0) {
+        ReferenceCountUtil.release(message);
+        promise.setSuccess();
+        return;
+      }
+      context.write(message, promise);
     }
 
     @Override
