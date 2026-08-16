@@ -36,36 +36,42 @@ final class VelocitySessionProtocolRawBytesTest {
     ProtocolProfile profile = registry.profiles().require(version, ProtocolPhase.PLAY);
     RecordingTransport transport = new RecordingTransport();
     ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+    VelocitySessionProtocol protocol =
+        new VelocitySessionProtocolFactory(
+                registry, () -> KEEP_ALIVE_ID, scheduler, Duration.ofMinutes(1))
+            .create(
+                version,
+                profile,
+                ProtocolPhase.PLAY,
+                transport,
+                cause -> {
+                  throw new AssertionError("Unexpected asynchronous protocol failure", cause);
+                });
     try {
-      VelocitySessionProtocol protocol =
-          new VelocitySessionProtocolFactory(
-                  registry, () -> KEEP_ALIVE_ID, scheduler, Duration.ofMinutes(1))
-              .create(
-                  version,
-                  profile,
-                  ProtocolPhase.PLAY,
-                  transport,
-                  cause -> {
-                    throw new AssertionError("Unexpected asynchronous protocol failure", cause);
-                  });
-
       protocol.onOpened();
 
       ByteBuf outbound =
           VelocityFrameCodec.encode(UnpooledByteBufAllocator.DEFAULT, transport.frame);
-      assertThat(outbound.readUnsignedByte())
-          .isEqualTo((short) Minecraft26_2Protocol.CLIENTBOUND_KEEP_ALIVE_ID.value());
-      assertThat(outbound.readLong()).isEqualTo(KEEP_ALIVE_ID);
-      outbound.release();
+      try {
+        assertThat(outbound.readUnsignedByte())
+            .isEqualTo((short) Minecraft26_2Protocol.CLIENTBOUND_KEEP_ALIVE_ID.value());
+        assertThat(outbound.readLong()).isEqualTo(KEEP_ALIVE_ID);
+      } finally {
+        outbound.release();
+      }
 
       ByteBuf clientBytes = Unpooled.buffer();
-      clientBytes.writeByte(Minecraft26_2Protocol.SERVERBOUND_KEEP_ALIVE_ID.value());
-      clientBytes.writeLong(KEEP_ALIVE_ID);
-      protocol.onInboundFrame(VelocityFrameCodec.decode(clientBytes));
-      clientBytes.release();
+      try {
+        clientBytes.writeByte(Minecraft26_2Protocol.SERVERBOUND_KEEP_ALIVE_ID.value());
+        clientBytes.writeLong(KEEP_ALIVE_ID);
+        protocol.onInboundFrame(VelocityFrameCodec.decode(clientBytes));
+      } finally {
+        clientBytes.release();
+      }
 
       assertThat(protocol.isHeartbeatAcknowledged()).isTrue();
     } finally {
+      protocol.close();
       scheduler.shutdownNow();
     }
   }

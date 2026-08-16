@@ -7,6 +7,8 @@ import io.github.zapolyarnydev.proxyvirtualizer.protocol.engine.SemanticActionRo
 import java.time.Duration;
 import java.util.Objects;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 
 public final class VelocitySessionProtocol {
 
@@ -16,7 +18,7 @@ public final class VelocitySessionProtocol {
   private final SemanticActionRouter actions;
   private final ScheduledExecutorService scheduler;
   private final Duration heartbeatTimeout;
-  private final java.util.function.Consumer<Throwable> asynchronousFailureHandler;
+  private final Consumer<Throwable> asynchronousFailureHandler;
 
   VelocitySessionProtocol(
       ProtocolSessionProcessor processor,
@@ -24,7 +26,7 @@ public final class VelocitySessionProtocol {
       SessionHeartbeat heartbeat,
       ScheduledExecutorService scheduler,
       Duration heartbeatTimeout,
-      java.util.function.Consumer<Throwable> asynchronousFailureHandler) {
+      Consumer<Throwable> asynchronousFailureHandler) {
     this.processor = Objects.requireNonNull(processor, "processor");
     this.context = Objects.requireNonNull(context, "context");
     this.heartbeat = Objects.requireNonNull(heartbeat, "heartbeat");
@@ -48,8 +50,8 @@ public final class VelocitySessionProtocol {
                     new HeartbeatTimeoutException(
                         "KeepAlive acknowledgement was not received within " + heartbeatTimeout));
             },
-            heartbeatTimeout.toMillis(),
-            java.util.concurrent.TimeUnit.MILLISECONDS));
+            heartbeatTimeout.toNanos(),
+            TimeUnit.NANOSECONDS));
   }
 
   public void onInboundFrame(InboundFrame frame) {

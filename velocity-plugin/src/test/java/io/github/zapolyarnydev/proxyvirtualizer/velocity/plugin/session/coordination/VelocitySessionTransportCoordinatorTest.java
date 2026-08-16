@@ -30,17 +30,27 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 import org.jetbrains.annotations.NotNull;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
 final class VelocitySessionTransportCoordinatorTest {
 
   private static final long KEEP_ALIVE_ID = -7_612_481_992L;
+  private static final List<ScheduledExecutorService> HEARTBEAT_SCHEDULERS =
+      new CopyOnWriteArrayList<>();
+
+  @AfterEach
+  void closeHeartbeatSchedulers() {
+    HEARTBEAT_SCHEDULERS.forEach(ScheduledExecutorService::shutdownNow);
+    HEARTBEAT_SCHEDULERS.clear();
+  }
 
   @Test
   void startsTransportWhenSessionOpens() {
@@ -378,13 +388,7 @@ final class VelocitySessionTransportCoordinatorTest {
     private final List<PlayerId> closedPlayers = new ArrayList<>();
     private final List<Throwable> failures = new ArrayList<>();
     private final CountDownLatch failureReported = new CountDownLatch(1);
-    private final ScheduledExecutorService heartbeatScheduler =
-        Executors.newSingleThreadScheduledExecutor(
-            runnable -> {
-              Thread thread = new Thread(runnable, "test-heartbeat");
-              thread.setDaemon(true);
-              return thread;
-            });
+    private final ScheduledExecutorService heartbeatScheduler = heartbeatScheduler();
     private CompletionStage<?> coreCloseResult = CompletableFuture.completedFuture(null);
     private final VelocitySessionTransportCoordinator coordinator;
 
@@ -478,6 +482,18 @@ final class VelocitySessionTransportCoordinatorTest {
 
     private boolean awaitFailure() throws InterruptedException {
       return failureReported.await(2, TimeUnit.SECONDS);
+    }
+
+    private static ScheduledExecutorService heartbeatScheduler() {
+      ScheduledExecutorService scheduler =
+          Executors.newSingleThreadScheduledExecutor(
+              runnable -> {
+                Thread thread = new Thread(runnable, "test-heartbeat");
+                thread.setDaemon(true);
+                return thread;
+              });
+      HEARTBEAT_SCHEDULERS.add(scheduler);
+      return scheduler;
     }
   }
 

@@ -31,7 +31,8 @@ public final class VelocitySessionProtocolFactory {
     encoder = new OutboundPacketEncoder(registry);
     this.keepAliveIds = Objects.requireNonNull(keepAliveIds, "keepAliveIds");
     this.scheduler = Objects.requireNonNull(scheduler, "scheduler");
-    this.heartbeatTimeout = Objects.requireNonNull(heartbeatTimeout, "heartbeatTimeout");
+    this.heartbeatTimeout = requirePositive(heartbeatTimeout);
+    this.heartbeatTimeout.toNanos();
   }
 
   public VelocitySessionProtocol create(
@@ -50,5 +51,12 @@ public final class VelocitySessionProtocolFactory {
         scheduler,
         heartbeatTimeout,
         asynchronousFailureHandler);
+  }
+
+  private static Duration requirePositive(Duration heartbeatTimeout) {
+    Objects.requireNonNull(heartbeatTimeout, "heartbeatTimeout");
+    if (heartbeatTimeout.isZero() || heartbeatTimeout.isNegative())
+      throw new IllegalArgumentException("Heartbeat timeout must be positive");
+    return heartbeatTimeout;
   }
 }

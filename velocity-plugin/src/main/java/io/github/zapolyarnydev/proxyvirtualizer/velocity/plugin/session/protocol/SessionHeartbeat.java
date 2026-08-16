@@ -45,18 +45,28 @@ final class SessionHeartbeat {
   }
 
   synchronized void armTimeout(ScheduledFuture<?> timeout) {
-    this.timeout = Objects.requireNonNull(timeout, "timeout");
-    if (state != State.AWAITING_ACKNOWLEDGEMENT) cancelTimeout();
+    Objects.requireNonNull(timeout, "timeout");
+    if (state != State.AWAITING_ACKNOWLEDGEMENT) {
+      timeout.cancel(false);
+      return;
+    }
+    if (this.timeout != null) {
+      timeout.cancel(false);
+      throw new IllegalStateException("Session heartbeat timeout has already been armed");
+    }
+    this.timeout = timeout;
   }
 
   synchronized boolean expire() {
     if (state != State.AWAITING_ACKNOWLEDGEMENT) return false;
 
     state = State.TIMED_OUT;
+    timeout = null;
     return true;
   }
 
   synchronized void close() {
+    state = State.CLOSED;
     cancelTimeout();
   }
 
@@ -65,13 +75,16 @@ final class SessionHeartbeat {
   }
 
   private void cancelTimeout() {
-    if (timeout != null) timeout.cancel(false);
+    ScheduledFuture<?> activeTimeout = timeout;
+    timeout = null;
+    if (activeTimeout != null) activeTimeout.cancel(false);
   }
 
   private enum State {
     NEW,
     AWAITING_ACKNOWLEDGEMENT,
     ACKNOWLEDGED,
-    TIMED_OUT
+    TIMED_OUT,
+    CLOSED
   }
 }
