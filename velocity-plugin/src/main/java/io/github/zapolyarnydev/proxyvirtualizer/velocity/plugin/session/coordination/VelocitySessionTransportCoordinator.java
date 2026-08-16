@@ -27,6 +27,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadLocalRandom;
@@ -42,6 +44,7 @@ public final class VelocitySessionTransportCoordinator
   private final SessionTransportFailureHandler failureHandler;
   private final ProtocolRegistry protocols;
   private final VelocitySessionProtocolFactory protocolFactory;
+  private final VelocityBackendConnectionController backendConnections;
   private final ScheduledExecutorService heartbeatScheduler;
   private final Map<ConnectionId, VelocitySessionTransportBinding> transportsByConnectionId =
       new HashMap<>();
@@ -78,11 +81,34 @@ public final class VelocitySessionTransportCoordinator
       @NotNull LongSupplier keepAliveIds,
       @NotNull ScheduledExecutorService heartbeatScheduler,
       @NotNull Duration heartbeatTimeout) {
+    this(
+        connections,
+        transportFactory,
+        sessionCloser,
+        failureHandler,
+        protocols,
+        VelocityBackendConnections::suspend,
+        keepAliveIds,
+        heartbeatScheduler,
+        heartbeatTimeout);
+  }
+
+  VelocitySessionTransportCoordinator(
+      @NotNull VelocityConnectionRegistry connections,
+      @NotNull VelocitySessionTransportFactory transportFactory,
+      @NotNull CoreSessionCloser sessionCloser,
+      @NotNull SessionTransportFailureHandler failureHandler,
+      @NotNull ProtocolRegistry protocols,
+      @NotNull VelocityBackendConnectionController backendConnections,
+      @NotNull LongSupplier keepAliveIds,
+      @NotNull ScheduledExecutorService heartbeatScheduler,
+      @NotNull Duration heartbeatTimeout) {
     this.connections = Objects.requireNonNull(connections, "connections");
     this.transportFactory = Objects.requireNonNull(transportFactory, "transportFactory");
     this.sessionCloser = Objects.requireNonNull(sessionCloser, "sessionCloser");
     this.failureHandler = Objects.requireNonNull(failureHandler, "failureHandler");
     this.protocols = Objects.requireNonNull(protocols, "protocols");
+    this.backendConnections = Objects.requireNonNull(backendConnections, "backendConnections");
     this.heartbeatScheduler = Objects.requireNonNull(heartbeatScheduler, "heartbeatScheduler");
     protocolFactory =
         new VelocitySessionProtocolFactory(
@@ -103,7 +129,7 @@ public final class VelocitySessionTransportCoordinator
 
   @Override
   public void close() {
-    drainTransports().forEach(active -> closeTransport(active, TransportCloseReason.REQUESTED));
+    drainTransports().forEach(active -> terminate(active, TransportCloseReason.REQUESTED));
     heartbeatScheduler.shutdownNow();
   }
 
@@ -147,10 +173,17 @@ public final class VelocitySessionTransportCoordinator
             ProtocolPhase.PLAY,
             transport,
             cause -> protocolFailed(session, cause));
+    VelocityBackendConnection backend;
+    try {
+      backend = backendConnections.suspend(connection.player());
+    } catch (RuntimeException cause) {
+      reconcileCoreSession(session, cause);
+      return;
+    }
     VelocitySessionTransportBinding active =
-        new VelocitySessionTransportBinding(session, transport, protocol);
+        new VelocitySessionTransportBinding(session, transport, protocol, backend);
     if (!install(active)) {
-      closeTransport(active, TransportCloseReason.REQUESTED);
+      terminate(active, TransportCloseReason.REQUESTED);
       return;
     }
     active.beginSwitching();
@@ -175,12 +208,12 @@ public final class VelocitySessionTransportCoordinator
 
   private void close(SessionSnapshot session) {
     VelocitySessionTransportBinding active = remove(session);
-    if (active != null) closeTransport(active, TransportCloseReason.REQUESTED);
+    if (active != null) restore(active);
   }
 
   private void close(ConnectionId connectionId, TransportCloseReason closeReason) {
     VelocitySessionTransportBinding active = remove(connectionId);
-    if (active != null) closeTransport(active, closeReason);
+    if (active != null) terminate(active, closeReason);
   }
 
   private void transportOpened(VelocitySessionTransportBinding active) {
@@ -192,7 +225,9 @@ public final class VelocitySessionTransportCoordinator
 
   private void transportClosed(VelocitySessionTransportBinding active) {
     if (remove(active)) {
-      active.beginClosing();
+      if (!active.beginClosing()) return;
+      active.protocol().close();
+      active.backend().terminate();
       closeCoreSession(active.session());
     }
   }
@@ -214,12 +249,12 @@ public final class VelocitySessionTransportCoordinator
       VelocitySessionTransportBinding active, Throwable cause, TransportCloseReason closeReason) {
     boolean owned = remove(active);
     if (!owned) {
-      if (!active.transport().state().isTerminal()) closeTransport(active, closeReason);
+      if (!active.transport().state().isTerminal()) terminate(active, closeReason);
       return;
     }
 
     try {
-      closeTransport(active, closeReason);
+      terminate(active, closeReason);
     } finally {
       reconcileCoreSession(active.session(), cause);
     }
@@ -230,21 +265,59 @@ public final class VelocitySessionTransportCoordinator
     reportFailure(session, cause);
   }
 
-  private void closeTransport(
-      VelocitySessionTransportBinding active, TransportCloseReason closeReason) {
+  private void restore(VelocitySessionTransportBinding active) {
+    closeTransport(active, TransportCloseReason.REQUESTED)
+        .whenComplete(
+            (ignored, cause) -> {
+              if (cause != null) {
+                active.backend().terminate();
+                return;
+              }
+              try {
+                active
+                    .backend()
+                    .restore()
+                    .whenComplete(
+                        (restored, restoreCause) -> {
+                          if (restoreCause != null) {
+                            active.backend().terminate();
+                            reportFailure(active.session(), restoreCause);
+                          }
+                        });
+              } catch (RuntimeException restoreException) {
+                active.backend().terminate();
+                reportFailure(active.session(), restoreException);
+              }
+            });
+  }
+
+  private void terminate(VelocitySessionTransportBinding active, TransportCloseReason closeReason) {
     if (!active.beginClosing()) return;
 
+    closeOwnedTransport(active, closeReason);
+    active.backend().terminate();
+  }
+
+  private CompletionStage<Void> closeTransport(
+      VelocitySessionTransportBinding active, TransportCloseReason closeReason) {
+    if (!active.beginClosing()) return CompletableFuture.completedFuture(null);
+
+    return closeOwnedTransport(active, closeReason);
+  }
+
+  private CompletionStage<Void> closeOwnedTransport(
+      VelocitySessionTransportBinding active, TransportCloseReason closeReason) {
     active.protocol().close();
     try {
-      active
-          .transport()
-          .close(closeReason)
-          .whenComplete(
-              (ignored, cause) -> {
-                if (cause != null) reportFailure(active.session(), cause);
-              });
+      CompletionStage<Void> closing = active.transport().close(closeReason);
+      closing.whenComplete(
+          (ignored, cause) -> {
+            if (cause != null) reportFailure(active.session(), cause);
+          });
+      return closing;
     } catch (RuntimeException cause) {
       reportFailure(active.session(), cause);
+      return CompletableFuture.failedFuture(cause);
     }
   }
 

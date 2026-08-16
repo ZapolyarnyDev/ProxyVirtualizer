@@ -197,6 +197,18 @@ final class VelocitySessionTransportCoordinatorTest {
   }
 
   @Test
+  void restoresSuspendedBackendWhenSessionClosesNormally() {
+    RecordingBackend backend = new RecordingBackend();
+    Fixture fixture = new Fixture(FakeTransport::new, backend);
+    fixture.open();
+
+    fixture.coordinator.onSignal(new SessionClosedSignal(fixture.closedSession()));
+
+    assertThat(backend.restores).isOne();
+    assertThat(backend.terminations).isZero();
+  }
+
+  @Test
   void closesTransportWhenPlayerDisconnects() {
     Fixture fixture = new Fixture();
     fixture.open();
@@ -225,6 +237,18 @@ final class VelocitySessionTransportCoordinatorTest {
         .isEqualTo("boom");
     assertThat(fixture.transport().closeReasons)
         .containsExactly(TransportCloseReason.TRANSPORT_FAILURE);
+  }
+
+  @Test
+  void terminatesSuspendedBackendWhenTransportFails() {
+    RecordingBackend backend = new RecordingBackend();
+    Fixture fixture = new Fixture(FakeTransport::new, backend);
+    fixture.open();
+
+    fixture.transport().fail(new IllegalStateException("boom"));
+
+    assertThat(backend.restores).isZero();
+    assertThat(backend.terminations).isOne();
   }
 
   @Test
@@ -374,6 +398,7 @@ final class VelocitySessionTransportCoordinatorTest {
             (proxy, method, arguments) -> {
               if (method.getName().equals("getUniqueId")) return uniqueId;
               if (method.getName().equals("getProtocolVersion")) return protocolVersion;
+              if (method.getName().equals("getCurrentServer")) return java.util.Optional.empty();
 
               throw new UnsupportedOperationException(method.getName());
             });
@@ -404,6 +429,14 @@ final class VelocitySessionTransportCoordinatorTest {
       this(transportSupplier, com.velocitypowered.api.network.ProtocolVersion.MINECRAFT_26_2);
     }
 
+    private Fixture(Supplier<? extends FakeTransport> transportSupplier, RecordingBackend backend) {
+      this(
+          transportSupplier,
+          com.velocitypowered.api.network.ProtocolVersion.MINECRAFT_26_2,
+          Duration.ofSeconds(30),
+          ignored -> backend);
+    }
+
     private Fixture(
         Supplier<? extends FakeTransport> transportSupplier, Duration heartbeatTimeout) {
       this(
@@ -422,6 +455,18 @@ final class VelocitySessionTransportCoordinatorTest {
         Supplier<? extends FakeTransport> transportSupplier,
         com.velocitypowered.api.network.ProtocolVersion protocolVersion,
         Duration heartbeatTimeout) {
+      this(
+          transportSupplier,
+          protocolVersion,
+          heartbeatTimeout,
+          VelocityBackendConnections::suspend);
+    }
+
+    private Fixture(
+        Supplier<? extends FakeTransport> transportSupplier,
+        com.velocitypowered.api.network.ProtocolVersion protocolVersion,
+        Duration heartbeatTimeout,
+        VelocityBackendConnectionController backendConnections) {
       connection = connections.register(player(UUID.randomUUID(), protocolVersion)).connection();
       session =
           new SessionSnapshot(
@@ -449,6 +494,7 @@ final class VelocitySessionTransportCoordinatorTest {
                 failureReported.countDown();
               },
               protocols,
+              backendConnections,
               () -> KEEP_ALIVE_ID,
               heartbeatScheduler,
               heartbeatTimeout);
@@ -494,6 +540,23 @@ final class VelocitySessionTransportCoordinatorTest {
               });
       HEARTBEAT_SCHEDULERS.add(scheduler);
       return scheduler;
+    }
+  }
+
+  private static final class RecordingBackend implements VelocityBackendConnection {
+
+    private int restores;
+    private int terminations;
+
+    @Override
+    public CompletionStage<Void> restore() {
+      restores++;
+      return CompletableFuture.completedFuture(null);
+    }
+
+    @Override
+    public void terminate() {
+      terminations++;
     }
   }
 

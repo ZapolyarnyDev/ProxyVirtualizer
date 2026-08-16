@@ -10,16 +10,22 @@ final class VelocitySessionTransportBinding {
   private final SessionSnapshot session;
   private final SessionTransport transport;
   private final VelocitySessionProtocol protocol;
+  private final VelocityBackendConnection backend;
   private VirtualTransportOwnershipState ownership = VirtualTransportOwnershipState.BACKEND_BOUND;
 
   VelocitySessionTransportBinding(
-      SessionSnapshot session, SessionTransport transport, VelocitySessionProtocol protocol) {
+      SessionSnapshot session,
+      SessionTransport transport,
+      VelocitySessionProtocol protocol,
+      VelocityBackendConnection backend) {
     Objects.requireNonNull(session, "session");
     Objects.requireNonNull(transport, "transport");
     Objects.requireNonNull(protocol, "protocol");
+    Objects.requireNonNull(backend, "backend");
     this.session = session;
     this.transport = transport;
     this.protocol = protocol;
+    this.backend = backend;
   }
 
   SessionSnapshot session() {
@@ -32,6 +38,10 @@ final class VelocitySessionTransportBinding {
 
   VelocitySessionProtocol protocol() {
     return protocol;
+  }
+
+  VelocityBackendConnection backend() {
+    return backend;
   }
 
   synchronized void beginSwitching() {
