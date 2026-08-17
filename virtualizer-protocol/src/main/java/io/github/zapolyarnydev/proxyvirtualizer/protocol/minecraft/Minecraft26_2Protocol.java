@@ -119,19 +119,10 @@ public final class Minecraft26_2Protocol {
                 KnownPacksPacket.class, KnownPacksPacket::new, KnownPacksPacket::packs));
     registry
         .codecs()
-        .registerClientbound(
-            PROFILE_ID,
-            ProtocolPhase.PLAY,
-            PLAY_LOGIN_ID,
-            new RawPayloadCodec<>(
-                PlayLoginPacket.class, PlayLoginPacket::new, PlayLoginPacket::payload));
+        .registerClientbound(PROFILE_ID, ProtocolPhase.PLAY, PLAY_LOGIN_ID, new PlayLoginCodec());
     registry
         .codecs()
-        .registerClientbound(
-            PROFILE_ID,
-            ProtocolPhase.PLAY,
-            RESPAWN_ID,
-            new RawPayloadCodec<>(RespawnPacket.class, RespawnPacket::new, RespawnPacket::payload));
+        .registerClientbound(PROFILE_ID, ProtocolPhase.PLAY, RESPAWN_ID, new RespawnCodec());
     registry
         .codecs()
         .registerClientbound(
