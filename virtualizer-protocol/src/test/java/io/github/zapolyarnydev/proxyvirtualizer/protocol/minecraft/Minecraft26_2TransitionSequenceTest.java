@@ -6,6 +6,8 @@ import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.packet.PacketDirect
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.api.profile.ProtocolPhase;
 import io.github.zapolyarnydev.proxyvirtualizer.protocol.registry.ProtocolRegistry;
 import java.nio.ByteBuffer;
+import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
 final class Minecraft26_2TransitionSequenceTest {
@@ -65,5 +67,41 @@ final class Minecraft26_2TransitionSequenceTest {
                 .decode(
                     new SetChunkCacheCenterCodec().encode(new SetChunkCacheCenterPacket(-1, 4))))
         .isEqualTo(new SetChunkCacheCenterPacket(-1, 4));
+  }
+
+  @Test
+  void roundTripsThe776LoginAndRespawnSchema() {
+    PlayLoginPacket.DimensionState dimension =
+        new PlayLoginPacket.DimensionState(
+            0,
+            "minecraft:overworld",
+            42L,
+            (byte) 1,
+            (byte) -1,
+            false,
+            true,
+            Optional.of(new PlayLoginPacket.DeathLocation("minecraft:overworld", 7L)),
+            0,
+            63);
+    PlayLoginPacket login =
+        new PlayLoginPacket(
+            12,
+            false,
+            List.of("minecraft:overworld"),
+            20,
+            10,
+            10,
+            false,
+            true,
+            false,
+            dimension,
+            true,
+            true);
+
+    assertThat(new PlayLoginCodec().decode(new PlayLoginCodec().encode(login))).isEqualTo(login);
+    assertThat(
+            new RespawnCodec()
+                .decode(new RespawnCodec().encode(new RespawnPacket(dimension, (byte) 3))))
+        .isEqualTo(new RespawnPacket(dimension, (byte) 3));
   }
 }
